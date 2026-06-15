@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sealien CtrlCore 调试台</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header class="top-bar">
+    <div>
+      <h1>Sealien CtrlCore 调试台</h1>
+      <p class="subtitle">MCU 数据 · 模块化面板</p>
+    </div>
+    <div class="top-right">
+      <div id="server-time" class="server-time">--</div>
+      <div id="link-badge" class="badge offline">未连接</div>
+    </div>
+  </header>
+
+  <div class="layout">
+    <nav id="module-nav" class="side-nav"></nav>
+    <main id="panel-root" class="panel-root">
+      <p class="hint">加载中…</p>
+    </main>
+  </div>
+
+  <script type="module" src="/core/shell.js"></script>
+</body>
+</html>

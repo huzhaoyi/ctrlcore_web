@@ -1,0 +1,6 @@
+{
+  "modules": [
+    { "id": "link", "script": "/modules/link/panel.js" },
+    { "id": "usr_sat03", "script": "/modules/usr_sat03/panel.js" }
+  ]
+}

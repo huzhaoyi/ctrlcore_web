@@ -1,0 +1,17 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+
+# Colcon / ROS build artifacts
+scripts/install/
+scripts/log/
+scripts/build/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*~

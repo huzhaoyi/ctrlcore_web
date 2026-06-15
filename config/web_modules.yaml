@@ -1,0 +1,8 @@
+ctrlcore_web_node:
+  ros__parameters:
+    web_host: "0.0.0.0"
+    web_port: 8081
+    poll_stale_sec: 2.0
+    enabled_modules:
+      - link
+      - usr_sat03
