@@ -7,6 +7,24 @@ export default {
   mount(root) {
     root.innerHTML = `
       <section class="panel">
+        <h2>链路状态</h2>
+        <div class="card-grid">
+          <div class="card"><div class="label">GNSS 话题</div><div id="sat-gnss-topic" class="value mono-block">/usr_sat03/gnss</div></div>
+          <div class="card"><div class="label">下行话题</div><div id="sat-down-topic" class="value mono-block">/usr_sat03/downlink</div></div>
+          <div class="card"><div class="label">上行话题</div><div id="sat-uplink-topic" class="value mono-block">/usr_sat03/uplink</div></div>
+          <div class="card"><div class="label">GNSS 距上次 (s)</div><div id="sat-gnss-age" class="value">--</div></div>
+        </div>
+        <div class="card-grid">
+          <div class="card wide"><div class="label">硬件 / 总线</div><div id="sat-hw" class="value mono-block">uart5 · USR-SAT03</div></div>
+        </div>
+        <p class="hint">
+          MCU <code>uart5</code> · USR-SAT03（115200 8N1，无 RS485 RE）
+          → MAVLink <code>SERIAL_CONTROL</code> (dev=120, 20Hz) → OBC ROS 话题。
+          Web 调试上行 POST → 发布 <code>/usr_sat03/uplink</code>。
+        </p>
+      </section>
+
+      <section class="panel">
         <h2>GNSS</h2>
         <div class="card-grid">
           <div class="card"><div class="label">有效</div><div id="sat-valid" class="value">--</div></div>
@@ -65,6 +83,14 @@ export default {
     if (!data) {
       return;
     }
+
+    document.getElementById("sat-gnss-topic").textContent = data.gnss_topic ?? "/usr_sat03/gnss";
+    document.getElementById("sat-down-topic").textContent = data.downlink_topic ?? "/usr_sat03/downlink";
+    document.getElementById("sat-uplink-topic").textContent = data.uplink_topic ?? "/usr_sat03/uplink";
+    document.getElementById("sat-hw").textContent =
+      data.hardware ?? "uart5 · USR-SAT03 · 115200 8N1 · MAVLink SERIAL_CONTROL (dev=120)";
+    document.getElementById("sat-gnss-age").textContent =
+      data.gnss_age_sec != null ? Number(data.gnss_age_sec).toFixed(3) : "—";
 
     const gnss = data.gnss;
     if (gnss) {

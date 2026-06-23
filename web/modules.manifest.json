@@ -1,6 +1,15 @@
 {
   "modules": [
     { "id": "link", "script": "/modules/link/panel.js" },
-    { "id": "usr_sat03", "script": "/modules/usr_sat03/panel.js" }
+    { "id": "usr_sat03", "script": "/modules/usr_sat03/panel.js" },
+    { "id": "elb105", "script": "/modules/elb105/panel.js" },
+    { "id": "height", "script": "/modules/height/panel.js" },
+    { "id": "depth", "script": "/modules/depth/panel.js" },
+    { "id": "wire_displacement", "script": "/modules/wire_displacement/panel.js" },
+    { "id": "bme280", "script": "/modules/bme280/panel.js" },
+    { "id": "gs", "script": "/modules/gs/panel.js" },
+    { "id": "pitch_motor", "script": "/modules/pitch_motor/panel.js" },
+    { "id": "plunger_pump", "script": "/modules/plunger_pump/panel.js" },
+    { "id": "thruster", "script": "/modules/thruster/panel.js" }
   ]
 }

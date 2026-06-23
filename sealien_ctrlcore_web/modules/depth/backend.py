@@ -1,22 +1,25 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""MCU 链路心跳模块。"""
+"""DEPTH_STATUS (mavlink_depth_status_t) → /DepthStatus 调试模块。"""
 
 import threading
 import time
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from rclpy.node import Node
 from rclpy.qos import qos_profile_sensor_data
 
-from sealien_ctrlpilot_msgmanagement.msg import HeartbeatStatus
+from sealien_ctrlpilot_msgmanagement.msg import DepthStatus
 from sealien_ctrlcore_web.core.base_module import WebModule
 
-HEARTBEAT_STATUS_TOPIC = "/HeartbeatStatus"
-LINK_HARDWARE = "ETH · MCU ↔ OBC MAVLink UDP · HEARTBEAT 1Hz"
+DEPTH_STATUS_CHANNEL_COUNT = 4
+DEPTH_STATUS_TOPIC = "/DepthStatus"
+DEPTH_HARDWARE = (
+    "Keller 21Y · ADS7128 ADC dev2 ch1 · 0–10V / 0–250 bar · DEPTH_STATUS @50Hz"
+)
 
 
-class LinkModule(WebModule):
+class DepthModule(WebModule):
     def __init__(self) -> None:
         self.lock_ = threading.Lock()
         self.rx_count_ = 0
@@ -25,30 +28,44 @@ class LinkModule(WebModule):
 
     @property
     def module_id(self) -> str:
-        return "link"
+        return "depth"
 
     @property
     def title(self) -> str:
-        return "MCU 链路"
+        return "深度计 Keller 21Y"
 
     def register(self, node: Node) -> None:
         node.create_subscription(
-            HeartbeatStatus,
-            "/HeartbeatStatus",
-            self._on_heartbeat,
+            DepthStatus,
+            DEPTH_STATUS_TOPIC,
+            self._on_depth,
             qos_profile_sensor_data,
         )
 
-    def _on_heartbeat(self, msg: HeartbeatStatus) -> None:
+    @staticmethod
+    def _to_float_list(values: List[float], count: int) -> List[float]:
+        out: List[float] = []
+        for idx in range(count):
+            if idx < len(values):
+                out.append(float(values[idx]))
+            else:
+                out.append(0.0)
+        return out
+
+    def _on_depth(self, msg: DepthStatus) -> None:
         snapshot = {
-            "status_topic": HEARTBEAT_STATUS_TOPIC,
-            "hardware": LINK_HARDWARE,
+            "status_topic": DEPTH_STATUS_TOPIC,
+            "hardware": DEPTH_HARDWARE,
+            "mcn_topic": "sensor_keller_depth",
+            "mavlink_status_msg": "DEPTH_STATUS (id=7, 50Hz)",
             "timestamp_ms": int(msg.timestamp_ms),
-            "type": int(msg.type),
-            "system_status": int(msg.system_status),
-            "mavlink_version": int(msg.mavlink_version),
+            "depth_m": self._to_float_list(list(msg.depth_m), DEPTH_STATUS_CHANNEL_COUNT),
+            "temperature_c": self._to_float_list(
+                list(msg.temperature_c), DEPTH_STATUS_CHANNEL_COUNT
+            ),
             "stamp_sec": float(msg.header.stamp.sec),
             "stamp_nanosec": int(msg.header.stamp.nanosec),
+            "frame_id": str(msg.header.frame_id),
         }
         with self.lock_:
             self.rx_count_ += 1
@@ -61,10 +78,10 @@ class LinkModule(WebModule):
             if self.latest_ is None:
                 return {
                     "connected": False,
-                    "message": f"waiting for {HEARTBEAT_STATUS_TOPIC}",
+                    "message": f"waiting for {DEPTH_STATUS_TOPIC}",
                     "rx_count": 0,
-                    "status_topic": HEARTBEAT_STATUS_TOPIC,
-                    "hardware": LINK_HARDWARE,
+                    "status_topic": DEPTH_STATUS_TOPIC,
+                    "hardware": DEPTH_HARDWARE,
                 }
             data = dict(self.latest_)
             data["connected"] = True

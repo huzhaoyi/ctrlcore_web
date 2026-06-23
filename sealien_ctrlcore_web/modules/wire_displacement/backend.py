@@ -1,22 +1,25 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""MCU 链路心跳模块。"""
+"""WIRE_DISPLACEMENT_STATUS → /WireDisplacementStatus 调试模块。"""
 
 import threading
 import time
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from rclpy.node import Node
 from rclpy.qos import qos_profile_sensor_data
 
-from sealien_ctrlpilot_msgmanagement.msg import HeartbeatStatus
+from sealien_ctrlpilot_msgmanagement.msg import WireDisplacementStatus
 from sealien_ctrlcore_web.core.base_module import WebModule
 
-HEARTBEAT_STATUS_TOPIC = "/HeartbeatStatus"
-LINK_HARDWARE = "ETH · MCU ↔ OBC MAVLink UDP · HEARTBEAT 1Hz"
+WIRE_DISPLACEMENT_CHANNEL_COUNT = 2
+WIRE_DISPLACEMENT_TOPIC = "/WireDisplacementStatus"
+WIRE_HARDWARE = (
+    "WPS-250-MK30-P10 ×2 · ADS7128 · 3.3V 激励 / 250mm · WIRE_DISPLACEMENT_STATUS @50Hz"
+)
 
 
-class LinkModule(WebModule):
+class WireDisplacementModule(WebModule):
     def __init__(self) -> None:
         self.lock_ = threading.Lock()
         self.rx_count_ = 0
@@ -25,30 +28,43 @@ class LinkModule(WebModule):
 
     @property
     def module_id(self) -> str:
-        return "link"
+        return "wire_displacement"
 
     @property
     def title(self) -> str:
-        return "MCU 链路"
+        return "拉线位移 WPS MK30"
 
     def register(self, node: Node) -> None:
         node.create_subscription(
-            HeartbeatStatus,
-            "/HeartbeatStatus",
-            self._on_heartbeat,
+            WireDisplacementStatus,
+            WIRE_DISPLACEMENT_TOPIC,
+            self._on_wire,
             qos_profile_sensor_data,
         )
 
-    def _on_heartbeat(self, msg: HeartbeatStatus) -> None:
+    @staticmethod
+    def _to_float_list(values: List[float], count: int) -> List[float]:
+        out: List[float] = []
+        for idx in range(count):
+            if idx < len(values):
+                out.append(float(values[idx]))
+            else:
+                out.append(0.0)
+        return out
+
+    def _on_wire(self, msg: WireDisplacementStatus) -> None:
         snapshot = {
-            "status_topic": HEARTBEAT_STATUS_TOPIC,
-            "hardware": LINK_HARDWARE,
+            "status_topic": WIRE_DISPLACEMENT_TOPIC,
+            "hardware": WIRE_HARDWARE,
+            "mcn_topic": "sensor_wire_displacement",
+            "mavlink_status_msg": "WIRE_DISPLACEMENT_STATUS (id=27, 50Hz)",
             "timestamp_ms": int(msg.timestamp_ms),
-            "type": int(msg.type),
-            "system_status": int(msg.system_status),
-            "mavlink_version": int(msg.mavlink_version),
+            "displacement_mm": self._to_float_list(
+                list(msg.displacement_mm), WIRE_DISPLACEMENT_CHANNEL_COUNT
+            ),
             "stamp_sec": float(msg.header.stamp.sec),
             "stamp_nanosec": int(msg.header.stamp.nanosec),
+            "frame_id": str(msg.header.frame_id),
         }
         with self.lock_:
             self.rx_count_ += 1
@@ -61,10 +77,10 @@ class LinkModule(WebModule):
             if self.latest_ is None:
                 return {
                     "connected": False,
-                    "message": f"waiting for {HEARTBEAT_STATUS_TOPIC}",
+                    "message": f"waiting for {WIRE_DISPLACEMENT_TOPIC}",
                     "rx_count": 0,
-                    "status_topic": HEARTBEAT_STATUS_TOPIC,
-                    "hardware": LINK_HARDWARE,
+                    "status_topic": WIRE_DISPLACEMENT_TOPIC,
+                    "hardware": WIRE_HARDWARE,
                 }
             data = dict(self.latest_)
             data["connected"] = True

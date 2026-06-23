@@ -77,12 +77,19 @@ export default {
           <div class="card"><div class="label">连接</div><div id="link-connected" class="value">--</div></div>
           <div class="card"><div class="label">心跳计数</div><div id="link-rx-count" class="value">--</div></div>
           <div class="card"><div class="label">MCU timestamp_ms</div><div id="link-ts" class="value">--</div></div>
-          <div class="card"><div class="label">最近更新 (s)</div><div id="link-age" class="value">--</div></div>
+          <div class="card"><div class="label">距上次更新 (s)</div><div id="link-age" class="value">--</div></div>
+          <div class="card"><div class="label">ROS 话题</div><div id="link-topic" class="value mono-block">/HeartbeatStatus</div></div>
           <div class="card"><div class="label">设备类型 (type)</div><div id="link-type" class="value">--</div></div>
           <div class="card"><div class="label">系统状态 (system_status)</div><div id="link-status" class="value">--</div></div>
           <div class="card"><div class="label">协议版本 (mavlink_version)</div><div id="link-mavlink" class="value">--</div></div>
         </div>
-        <p class="hint">数据来源：/HeartbeatStatus。MCU 当前默认：设备类型=通用设备，系统状态=待机。</p>
+        <div class="card-grid">
+          <div class="card wide"><div class="label">硬件 / 总线</div><div id="link-hw" class="value mono-block">ETH · MCU ↔ OBC MAVLink</div></div>
+        </div>
+        <p class="hint">
+          数据链：MCU → MAVLink <code>HEARTBEAT (msgid 0)</code> → OBC bridge → ROS
+          <code>/HeartbeatStatus</code>。只读链路探测，无下行命令。
+        </p>
       </section>
     `;
   },
@@ -97,6 +104,9 @@ export default {
     document.getElementById("link-rx-count").textContent = data.rx_count ?? "--";
     document.getElementById("link-ts").textContent = data.timestamp_ms ?? "--";
     document.getElementById("link-age").textContent = data.age_sec ?? "--";
+    document.getElementById("link-topic").textContent = data.status_topic ?? "/HeartbeatStatus";
+    document.getElementById("link-hw").textContent =
+      data.hardware ?? "ETH · MCU ↔ OBC MAVLink UDP · HEARTBEAT 1Hz";
 
     if (connected) {
       document.getElementById("link-type").textContent = formatVehicleType(data.type);

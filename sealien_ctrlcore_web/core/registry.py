@@ -9,10 +9,28 @@ from rclpy.node import Node
 from sealien_ctrlcore_web.core.base_module import WebModule
 from sealien_ctrlcore_web.modules.link.backend import LinkModule
 from sealien_ctrlcore_web.modules.usr_sat03.backend import UsrSat03Module
+from sealien_ctrlcore_web.modules.elb105.backend import Elb105Module
+from sealien_ctrlcore_web.modules.height.backend import HeightModule
+from sealien_ctrlcore_web.modules.depth.backend import DepthModule
+from sealien_ctrlcore_web.modules.wire_displacement.backend import WireDisplacementModule
+from sealien_ctrlcore_web.modules.bme280.backend import Bme280Module
+from sealien_ctrlcore_web.modules.gs.backend import GsModule
+from sealien_ctrlcore_web.modules.pitch_motor.backend import PitchMotorModule
+from sealien_ctrlcore_web.modules.plunger_pump.backend import PlungerPumpModule
+from sealien_ctrlcore_web.modules.thruster.backend import ThrusterModule
 
 _MODULE_CLASSES = {
     "link": LinkModule,
     "usr_sat03": UsrSat03Module,
+    "elb105": Elb105Module,
+    "height": HeightModule,
+    "depth": DepthModule,
+    "wire_displacement": WireDisplacementModule,
+    "bme280": Bme280Module,
+    "gs": GsModule,
+    "pitch_motor": PitchMotorModule,
+    "plunger_pump": PlungerPumpModule,
+    "thruster": ThrusterModule,
 }
 
 
@@ -59,3 +77,5 @@ class ModuleRegistry:
         for module in self.modules_:
             if hasattr(module, "drain_publish_queue"):
                 module.drain_publish_queue()
+            if hasattr(module, "drain_service_queue"):
+                module.drain_service_queue()

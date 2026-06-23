@@ -1,22 +1,23 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""MCU 链路心跳模块。"""
+"""HEIGHT_STATUS (mavlink_height_status_t) → /SonarAltimeterStatus 调试模块。"""
 
 import threading
 import time
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from rclpy.node import Node
 from rclpy.qos import qos_profile_sensor_data
 
-from sealien_ctrlpilot_msgmanagement.msg import HeartbeatStatus
+from sealien_ctrlpilot_msgmanagement.msg import SonarAltimeterStatus
 from sealien_ctrlcore_web.core.base_module import WebModule
 
-HEARTBEAT_STATUS_TOPIC = "/HeartbeatStatus"
-LINK_HARDWARE = "ETH · MCU ↔ OBC MAVLink UDP · HEARTBEAT 1Hz"
+HEIGHT_STATUS_CHANNEL_COUNT = 5
+HEIGHT_STATUS_TOPIC = "/SonarAltimeterStatus"
+HEIGHT_HARDWARE = "uart3 RS485 · GCRY-S400-FL · NMEA $SDDBT @9600 · 4Hz"
 
 
-class LinkModule(WebModule):
+class HeightModule(WebModule):
     def __init__(self) -> None:
         self.lock_ = threading.Lock()
         self.rx_count_ = 0
@@ -25,30 +26,43 @@ class LinkModule(WebModule):
 
     @property
     def module_id(self) -> str:
-        return "link"
+        return "height"
 
     @property
     def title(self) -> str:
-        return "MCU 链路"
+        return "高度计 GCRY-S400"
 
     def register(self, node: Node) -> None:
         node.create_subscription(
-            HeartbeatStatus,
-            "/HeartbeatStatus",
-            self._on_heartbeat,
+            SonarAltimeterStatus,
+            "/SonarAltimeterStatus",
+            self._on_height,
             qos_profile_sensor_data,
         )
 
-    def _on_heartbeat(self, msg: HeartbeatStatus) -> None:
+    @staticmethod
+    def _to_uint16_list(values: List[int]) -> List[int]:
+        out: List[int] = []
+        for idx in range(HEIGHT_STATUS_CHANNEL_COUNT):
+            if idx < len(values):
+                out.append(int(values[idx]) & 0xFFFF)
+            else:
+                out.append(65535)
+        return out
+
+    def _on_height(self, msg: SonarAltimeterStatus) -> None:
         snapshot = {
-            "status_topic": HEARTBEAT_STATUS_TOPIC,
-            "hardware": LINK_HARDWARE,
+            "status_topic": HEIGHT_STATUS_TOPIC,
+            "hardware": HEIGHT_HARDWARE,
+            "mcn_topic": "sensor_gcry_altimeter",
             "timestamp_ms": int(msg.timestamp_ms),
-            "type": int(msg.type),
-            "system_status": int(msg.system_status),
-            "mavlink_version": int(msg.mavlink_version),
+            "near_dist": self._to_uint16_list(list(msg.near_dist_cm)),
+            "near_stren": self._to_uint16_list(list(msg.near_stren)),
+            "far_dist": self._to_uint16_list(list(msg.far_dist_cm)),
+            "far_stren": self._to_uint16_list(list(msg.far_stren)),
+            "most_dist": self._to_uint16_list(list(msg.most_dist_cm)),
+            "most_stren": self._to_uint16_list(list(msg.most_stren)),
             "stamp_sec": float(msg.header.stamp.sec),
-            "stamp_nanosec": int(msg.header.stamp.nanosec),
         }
         with self.lock_:
             self.rx_count_ += 1
@@ -61,10 +75,10 @@ class LinkModule(WebModule):
             if self.latest_ is None:
                 return {
                     "connected": False,
-                    "message": f"waiting for {HEARTBEAT_STATUS_TOPIC}",
+                    "message": f"waiting for {HEIGHT_STATUS_TOPIC}",
                     "rx_count": 0,
-                    "status_topic": HEARTBEAT_STATUS_TOPIC,
-                    "hardware": LINK_HARDWARE,
+                    "status_topic": HEIGHT_STATUS_TOPIC,
+                    "hardware": HEIGHT_HARDWARE,
                 }
             data = dict(self.latest_)
             data["connected"] = True

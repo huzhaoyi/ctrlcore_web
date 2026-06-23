@@ -20,6 +20,10 @@ from sealien_ctrlcore_web.core.base_module import WebModule
 
 UPLINK_MAX_LEN = 70
 DOWNLINK_HISTORY = 50
+GNSS_TOPIC = "/usr_sat03/gnss"
+DOWNLINK_TOPIC = "/usr_sat03/downlink"
+UPLINK_TOPIC = "/usr_sat03/uplink"
+USR_SAT03_HARDWARE = "uart5 · USR-SAT03 · 115200 8N1 · MAVLink SERIAL_CONTROL (dev=120)"
 
 
 def _bytes_to_hex(data: List[int]) -> str:
@@ -129,6 +133,11 @@ class UsrSat03Module(WebModule):
                 down_age = round(time.monotonic() - self.last_downlink_mono_, 3)
 
             return {
+                "gnss_topic": GNSS_TOPIC,
+                "downlink_topic": DOWNLINK_TOPIC,
+                "uplink_topic": UPLINK_TOPIC,
+                "hardware": USR_SAT03_HARDWARE,
+                "mcn_topic": "sensor_usr_sat03",
                 "gnss": gnss,
                 "downlink": downlink,
                 "downlink_history": history,

@@ -6,3 +6,12 @@ ctrlcore_web_node:
     enabled_modules:
       - link
       - usr_sat03
+      - elb105
+      - height
+      - depth
+      - wire_displacement
+      - bme280
+      - gs
+      - pitch_motor
+      - plunger_pump
+      - thruster
