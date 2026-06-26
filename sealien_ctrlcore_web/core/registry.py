@@ -17,6 +17,7 @@ from sealien_ctrlcore_web.modules.bme280.backend import Bme280Module
 from sealien_ctrlcore_web.modules.gs.backend import GsModule
 from sealien_ctrlcore_web.modules.pitch_motor.backend import PitchMotorModule
 from sealien_ctrlcore_web.modules.plunger_pump.backend import PlungerPumpModule
+from sealien_ctrlcore_web.modules.bms.backend import BmsModule
 from sealien_ctrlcore_web.modules.thruster.backend import ThrusterModule
 
 _MODULE_CLASSES = {
@@ -30,6 +31,7 @@ _MODULE_CLASSES = {
     "gs": GsModule,
     "pitch_motor": PitchMotorModule,
     "plunger_pump": PlungerPumpModule,
+    "bms": BmsModule,
     "thruster": ThrusterModule,
 }
 

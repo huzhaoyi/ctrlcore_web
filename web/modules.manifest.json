@@ -10,6 +10,7 @@
     { "id": "gs", "script": "/modules/gs/panel.js" },
     { "id": "pitch_motor", "script": "/modules/pitch_motor/panel.js" },
     { "id": "plunger_pump", "script": "/modules/plunger_pump/panel.js" },
+    { "id": "bms", "script": "/modules/bms/panel.js" },
     { "id": "thruster", "script": "/modules/thruster/panel.js" }
   ]
 }
