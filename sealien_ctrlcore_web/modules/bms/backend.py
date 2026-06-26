@@ -11,6 +11,7 @@ from rclpy.qos import qos_profile_sensor_data
 
 from sealien_ctrlpilot_msgmanagement.msg import BmsMosCmd, BmsStatus
 from sealien_ctrlcore_web.core.base_module import WebModule
+from sealien_ctrlcore_web.modules.bms.bms_decode import enrich_bms_pack
 
 BMS_STATUS_TOPIC = "/BmsStatus"
 BMS_CMD_TOPIC = "/obc/bms_mos_cmd"
@@ -75,10 +76,17 @@ class BmsModule(WebModule):
             "remain_cap_mah": int(msg.remain_cap_mah),
             "discharge_time_min": int(msg.discharge_time_min),
             "charge_time_min": int(msg.charge_time_min),
+            "status_flags": status_flags,
+            "mos_status": mos_status,
             "discharging": bool(status_flags & 0x01),
             "charging": bool(status_flags & 0x02),
+            "mos_temp_valid": bool(status_flags & 0x10),
+            "env_temp_valid": bool(status_flags & 0x20),
             "discharge_mos_on": bool(mos_status & 0x02),
             "charge_mos_on": bool(mos_status & 0x04),
+            "balance0": int(msg.balance0),
+            "balance1": int(msg.balance1),
+            "balance2": int(msg.balance2),
             "protect_ov": int(msg.protect_ov),
             "protect_uv": int(msg.protect_uv),
             "protect_temp": int(msg.protect_temp),
@@ -94,7 +102,7 @@ class BmsModule(WebModule):
         with self.lock_:
             self.rx_count_ += 1
             self.last_rx_mono_ = time.monotonic()
-            self.packs_[int(msg.pack_id)] = pack
+            self.packs_[int(msg.pack_id)] = enrich_bms_pack(pack)
 
     def get_snapshot(self) -> Dict[str, Any]:
         with self.lock_:
@@ -116,7 +124,10 @@ class BmsModule(WebModule):
                 return base
 
             base["connected"] = True
-            base["packs"] = [self.packs_[pid] for pid in sorted(self.packs_.keys())]
+            base["packs"] = [
+                enrich_bms_pack(dict(self.packs_[pid]))
+                for pid in sorted(self.packs_.keys())
+            ]
             if self.last_rx_mono_ is not None:
                 base["age_sec"] = round(time.monotonic() - self.last_rx_mono_, 3)
             return base
