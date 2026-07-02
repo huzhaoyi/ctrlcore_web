@@ -18,6 +18,7 @@ from sealien_ctrlcore_web.modules.gs.backend import GsModule
 from sealien_ctrlcore_web.modules.pitch_motor.backend import PitchMotorModule
 from sealien_ctrlcore_web.modules.plunger_pump.backend import PlungerPumpModule
 from sealien_ctrlcore_web.modules.bms.backend import BmsModule
+from sealien_ctrlcore_web.modules.mixed_io.backend import MixedIoModule
 from sealien_ctrlcore_web.modules.thruster.backend import ThrusterModule
 
 _MODULE_CLASSES = {
@@ -32,6 +33,7 @@ _MODULE_CLASSES = {
     "pitch_motor": PitchMotorModule,
     "plunger_pump": PlungerPumpModule,
     "bms": BmsModule,
+    "mixed_io": MixedIoModule,
     "thruster": ThrusterModule,
 }
 
