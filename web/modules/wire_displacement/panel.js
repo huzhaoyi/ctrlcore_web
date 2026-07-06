@@ -62,7 +62,7 @@ export default {
           <div class="card wide"><div class="label">硬件 / 总线</div><div id="wire-hw" class="value mono-block">WPS MK30 ×2 · ADS7128</div></div>
         </div>
         <div class="hint">
-          WPS-250-MK30-P10（3.3 V 激励 / 250 mm）→ ADS7128 ADC
+          WPS-250-MK30-P10（5.0 V 激励 / 250 mm）→ ADS7128 ADC
           → MCN <code>sensor_wire_displacement</code>
           → MAVLink <code>WIRE_DISPLACEMENT_STATUS</code> (msgid 27, 50Hz)
           → ROS <code>/WireDisplacementStatus</code>。
@@ -128,7 +128,7 @@ export default {
     setCell("wire-topic", data.status_topic ?? "/WireDisplacementStatus");
     setCell(
       "wire-hw",
-      data.hardware ?? "WPS-250-MK30-P10 ×2 · ADS7128 · 3.3V / 250mm",
+      data.hardware ?? "WPS-250-MK30-P10 ×2 · ADS7128 · 5.0V / 250mm",
     );
     setCell(
       "wire-ts",

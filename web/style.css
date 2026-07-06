@@ -266,6 +266,28 @@ button:hover {
   color: var(--muted);
 }
 
+.en-state-on {
+  color: var(--ok);
+}
+
+.en-state-off {
+  color: var(--muted);
+}
+
+.en-card-active {
+  border-color: rgba(61, 214, 140, 0.55);
+  box-shadow: 0 0 0 1px rgba(61, 214, 140, 0.25);
+}
+
+.en-btn-off {
+  border-color: rgba(243, 18, 96, 0.45);
+  background: rgba(243, 18, 96, 0.15);
+}
+
+.en-btn-off:hover {
+  background: rgba(243, 18, 96, 0.28);
+}
+
 @media (max-width: 800px) {
   .layout {
     grid-template-columns: 1fr;

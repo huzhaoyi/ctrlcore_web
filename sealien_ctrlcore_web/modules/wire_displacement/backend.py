@@ -15,7 +15,7 @@ from sealien_ctrlcore_web.core.base_module import WebModule
 WIRE_DISPLACEMENT_CHANNEL_COUNT = 2
 WIRE_DISPLACEMENT_TOPIC = "/WireDisplacementStatus"
 WIRE_HARDWARE = (
-    "WPS-250-MK30-P10 ×2 · ADS7128 · 3.3V 激励 / 250mm · WIRE_DISPLACEMENT_STATUS @50Hz"
+    "WPS-250-MK30-P10 ×2 · ADS7128 · 5.0V 激励 / 250mm · WIRE_DISPLACEMENT_STATUS @50Hz"
 )
 
 

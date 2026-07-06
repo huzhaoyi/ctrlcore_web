@@ -15,5 +15,6 @@ ctrlcore_web_node:
       - pitch_motor
       - plunger_pump
       - bms
+      - payload_en
       - mixed_io
       - thruster
