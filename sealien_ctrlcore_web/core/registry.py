@@ -8,7 +8,7 @@ from rclpy.node import Node
 
 from sealien_ctrlcore_web.core.base_module import WebModule
 from sealien_ctrlcore_web.modules.link.backend import LinkModule
-from sealien_ctrlcore_web.modules.usr_sat03.backend import UsrSat03Module
+from sealien_ctrlcore_web.modules.m1.backend import M1Module
 from sealien_ctrlcore_web.modules.elb105.backend import Elb105Module
 from sealien_ctrlcore_web.modules.height.backend import HeightModule
 from sealien_ctrlcore_web.modules.depth.backend import DepthModule
@@ -24,7 +24,7 @@ from sealien_ctrlcore_web.modules.thruster.backend import ThrusterModule
 
 _MODULE_CLASSES = {
     "link": LinkModule,
-    "usr_sat03": UsrSat03Module,
+    "m1": M1Module,
     "elb105": Elb105Module,
     "height": HeightModule,
     "depth": DepthModule,

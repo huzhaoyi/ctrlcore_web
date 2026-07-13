@@ -19,7 +19,7 @@ class CtrlCoreWebNode(Node):
         self.declare_parameter("web_host", "0.0.0.0")
         self.declare_parameter("web_port", 8081)
         self.declare_parameter("poll_stale_sec", 2.0)
-        self.declare_parameter("enabled_modules", ["link", "usr_sat03"])
+        self.declare_parameter("enabled_modules", ["link", "m1"])
 
         self.web_host_ = self.get_parameter("web_host").get_parameter_value().string_value
         self.web_port_ = self.get_parameter("web_port").get_parameter_value().integer_value

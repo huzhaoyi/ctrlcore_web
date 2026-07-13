@@ -5,7 +5,7 @@ ctrlcore_web_node:
     poll_stale_sec: 2.0
     enabled_modules:
       - link
-      - usr_sat03
+      - m1
       - elb105
       - height
       - depth

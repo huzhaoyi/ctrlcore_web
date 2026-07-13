@@ -1,7 +1,7 @@
 {
   "modules": [
     { "id": "link", "script": "/modules/link/panel.js" },
-    { "id": "usr_sat03", "script": "/modules/usr_sat03/panel.js" },
+    { "id": "m1", "script": "/modules/m1/panel.js" },
     { "id": "elb105", "script": "/modules/elb105/panel.js" },
     { "id": "height", "script": "/modules/height/panel.js" },
     { "id": "depth", "script": "/modules/depth/panel.js" },
