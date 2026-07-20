@@ -70,7 +70,7 @@ export default {
           <div class="card wide"><div class="label">硬件 / 总线</div><div id="depth-hw" class="value mono-block">Keller 21Y · ADS7128</div></div>
         </div>
         <div class="hint">
-          Keller 21Y（0–10 V / 0–250 bar gauge）→ ADS7128 ADC
+          Keller 21Y（0.5–4.5 V / 0–250 bar gauge）→ ADS7128 DEV1 CH0（软件 I2C2）
           → MCN <code>sensor_keller_depth</code>
           → MAVLink <code>DEPTH_STATUS</code> (msgid 7, 50Hz)
           → ROS <code>/DepthStatus</code>。
@@ -133,7 +133,7 @@ export default {
     setCell("depth-topic", data.status_topic ?? "/DepthStatus");
     setCell(
       "depth-hw",
-      data.hardware ?? "Keller 21Y · ADS7128 ADC · 0–10V / 0–250 bar",
+      data.hardware ?? "Keller 21Y · ADS7128 DEV1 CH0 · 0.5–4.5V / 0–250 bar",
     );
     setCell(
       "depth-ts",

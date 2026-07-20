@@ -183,6 +183,8 @@ class M1Module(WebModule):
             "gnss_valid": int(msg.gnss_valid),
             "lon_deg": float(msg.lon_deg),
             "lat_deg": float(msg.lat_deg),
+            "speed": float(msg.speed),
+            "altitude": float(msg.altitude),
             "connected_ms": int(msg.connected_ms),
             "csq": int(msg.csq),
             "net_state": int(msg.net_state),

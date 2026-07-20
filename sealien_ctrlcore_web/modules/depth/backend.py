@@ -15,7 +15,7 @@ from sealien_ctrlcore_web.core.base_module import WebModule
 DEPTH_STATUS_CHANNEL_COUNT = 4
 DEPTH_STATUS_TOPIC = "/DepthStatus"
 DEPTH_HARDWARE = (
-    "Keller 21Y · ADS7128 ADC dev2 ch1 · 0–10V / 0–250 bar · DEPTH_STATUS @50Hz"
+    "Keller 21Y · ADS7128 DEV1 CH0 · 0.5–4.5V / 0–250 bar · DEPTH_STATUS @50Hz"
 )
 
 

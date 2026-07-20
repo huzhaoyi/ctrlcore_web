@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""CH9434A 载荷使能 EN1~EN8：/Switch + /obc/switch_cmd。
+"""AUV 电磁阀×2：TCA9535 I2C GPIO · /Switch + /obc/switch_cmd。
 
-index 0~7 ↔ EN1~EN8 ↔ MAVLink SWITCH_CMD / SWITCH_STATUS。
+index 0 ↔ 阀1(高压) · index 1 ↔ 阀2(低压)
+↔ MAVLink SWITCH_CMD / SWITCH_STATUS。
 """
 
 import threading
@@ -17,9 +18,12 @@ from sealien_ctrlcore_web.core.base_module import WebModule
 
 SWITCH_STATUS_TOPIC = "/Switch"
 SWITCH_CMD_TOPIC = "/obc/switch_cmd"
-EN_COUNT = 8
-EN_GPIO_MAP: List[int] = [13, 11, 10, 9, 8, 6, 4, 2]
-PAYLOAD_EN_HARDWARE = "CH9434A SPI1 · GPIO 高有效 · 默认全关"
+VALVE_COUNT = 2
+VALVE_LABELS: List[str] = ["阀1(高压)", "阀2(低压)"]
+VALVE_GPIO_HINTS: List[str] = ["DEV4 P1 PIN0 (24V/P4)", "DEV4 P1 PIN1 (24V/P4)"]
+PAYLOAD_EN_HARDWARE = (
+    "TCA9535 软件I2C1 PB3/PB4 · DEV4 P1 PIN0/1 · 24V/1A · 高有效 · 默认全关"
+)
 
 
 class PayloadEnModule(WebModule):
@@ -37,7 +41,7 @@ class PayloadEnModule(WebModule):
 
     @property
     def title(self) -> str:
-        return "载荷使能 EN1~8"
+        return "电磁阀×2"
 
     def register(self, node: Node) -> None:
         self.cmd_pub_ = node.create_publisher(SwitchCmd, SWITCH_CMD_TOPIC, 10)
@@ -49,8 +53,8 @@ class PayloadEnModule(WebModule):
         )
 
     def _on_status(self, msg: SwitchStatus) -> None:
-        states = [int(v) for v in msg.switch_status[:EN_COUNT]]
-        while len(states) < EN_COUNT:
+        states = [int(v) for v in msg.switch_status[:VALVE_COUNT]]
+        while len(states) < VALVE_COUNT:
             states.append(0)
 
         snapshot = {
@@ -58,12 +62,12 @@ class PayloadEnModule(WebModule):
             "cmd_topic": SWITCH_CMD_TOPIC,
             "mavlink_status_msg": "SWITCH_STATUS (id=9, 10Hz)",
             "mavlink_cmd_msg": "SWITCH_CMD (id=17)",
-            "mcn_topic": "ch9434a_gpio_read",
+            "mcn_topic": "i2c_ctrl_gpio_result",
             "hardware": PAYLOAD_EN_HARDWARE,
             "timestamp_ms": int(msg.timestamp_ms),
             "switch_status": states,
-            "en_labels": [f"EN{i + 1}" for i in range(EN_COUNT)],
-            "en_gpio": list(EN_GPIO_MAP),
+            "valve_labels": list(VALVE_LABELS),
+            "valve_gpio_hints": list(VALVE_GPIO_HINTS),
             "stamp_sec": float(msg.header.stamp.sec),
             "stamp_nanosec": int(msg.header.stamp.nanosec),
             "frame_id": str(msg.header.frame_id),
@@ -86,9 +90,9 @@ class PayloadEnModule(WebModule):
                     "status_topic": SWITCH_STATUS_TOPIC,
                     "cmd_topic": SWITCH_CMD_TOPIC,
                     "hardware": PAYLOAD_EN_HARDWARE,
-                    "switch_status": [0] * EN_COUNT,
-                    "en_labels": [f"EN{i + 1}" for i in range(EN_COUNT)],
-                    "en_gpio": list(EN_GPIO_MAP),
+                    "switch_status": [0] * VALVE_COUNT,
+                    "valve_labels": list(VALVE_LABELS),
+                    "valve_gpio_hints": list(VALVE_GPIO_HINTS),
                 }
             data = dict(self.latest_)
             data["connected"] = True
@@ -115,9 +119,9 @@ class PayloadEnModule(WebModule):
 
         if action == "all_off":
             with self.lock_:
-                for index in range(EN_COUNT):
+                for index in range(VALVE_COUNT):
                     self._publish_cmd(index, 0)
-                self.cmd_tx_count_ += EN_COUNT
+                self.cmd_tx_count_ += VALVE_COUNT
                 count = self.cmd_tx_count_
             return 200, {
                 "ok": True,
@@ -134,8 +138,8 @@ class PayloadEnModule(WebModule):
         except (TypeError, ValueError):
             return 400, {"ok": False, "error": "invalid index or value"}
 
-        if index < 0 or index >= EN_COUNT:
-            return 400, {"ok": False, "error": f"index must be 0..{EN_COUNT - 1}"}
+        if index < 0 or index >= VALVE_COUNT:
+            return 400, {"ok": False, "error": f"index must be 0..{VALVE_COUNT - 1}"}
         if value not in (0, 1):
             return 400, {"ok": False, "error": "value must be 0 or 1"}
 
@@ -148,6 +152,6 @@ class PayloadEnModule(WebModule):
             "ok": True,
             "index": index,
             "value": value,
-            "label": f"EN{index + 1}",
+            "label": VALVE_LABELS[index],
             "cmd_tx_count": count,
         }

@@ -54,7 +54,13 @@ ros2 launch sealien_ctrlcore_web ctrlcore_web.launch.py
 | 模块 ID | 面板 | ROS 订阅 | ROS 发布 |
 |---------|------|----------|----------|
 | `link` | MCU 链路 | `/HeartbeatStatus` | — |
-| `usr_sat03` | 天通卫通 | `/usr_sat03/gnss`, `/usr_sat03/downlink` | `/usr_sat03/uplink` |
+| `m1` | 天通卫通 M1 | `/m1/status`, `/m1/downlink`, `/m1/link_state` | `/m1/uplink`, `/m1/call_cmd` |
+| `depth` | Keller 深度 | `/DepthStatus` | — |
+| `wire_displacement` | 拉线位移 | `/WireDisplacementStatus` | — |
+| `payload_en` | 电磁阀×2 | `/Switch` | `/obc/switch_cmd` |
+| `bms` | 电池管理 | `/BmsStatus` | `/obc/bms_mos_cmd` |
+
+完整列表见 `web/modules.manifest.json` 与 `config/web_modules.yaml`。
 
 配置：`config/web_modules.yaml`
 
@@ -65,7 +71,10 @@ ctrlcore_web_node:
     web_port: 8081
     enabled_modules:
       - link
-      - usr_sat03
+      - m1
+      - depth
+      - wire_displacement
+      - payload_en
 ```
 
 ## HTTP API
@@ -74,18 +83,20 @@ ctrlcore_web_node:
 |------|------|------|
 | GET | `/api/meta` | 已启用模块列表 |
 | GET | `/api/snapshot` | 聚合快照（前端 500ms 轮询） |
-| POST | `/api/modules/usr_sat03/uplink` | 上行透传，`{"text":"hello"}` 或 `{"payload":[104,101,...]}` |
+| POST | `/api/modules/m1/uplink` | M1 卫星上行透传 |
+| POST | `/api/modules/payload_en/cmd` | 阀控，`{"index":0,"value":1}`（0=阀1 1=阀2） |
+| POST | `/api/modules/payload_en/all_off` | 两路阀全部关闭 |
 
 示例：
 
 ```bash
 curl -s http://127.0.0.1:8081/api/snapshot | python3 -m json.tool
-curl -s -X POST http://127.0.0.1:8081/api/modules/usr_sat03/uplink \
+curl -s -X POST http://127.0.0.1:8081/api/modules/payload_en/cmd \
   -H 'Content-Type: application/json' \
-  -d '{"text":"hello"}'
+  -d '{"index":0,"value":1}'
 ```
 
-MCU SIM 模式下，串口应出现：`usr_sat03 SIM uplink len=5`
+MCU `M1_SIM=1` 时，M1 驱动会内部造数；阀控需 `task_i2c_ctrl_gpio` 与 TCA9535 在线。
 
 ## 增删模块
 

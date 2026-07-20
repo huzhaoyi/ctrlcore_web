@@ -58,6 +58,8 @@ export default {
           <div class="card"><div class="label">有效</div><div id="m1-valid" class="value">--</div></div>
           <div class="card"><div class="label">经度 (°)</div><div id="m1-lon" class="value">--</div></div>
           <div class="card"><div class="label">纬度 (°)</div><div id="m1-lat" class="value">--</div></div>
+          <div class="card"><div class="label">速度</div><div id="m1-speed" class="value">--</div></div>
+          <div class="card"><div class="label">海拔</div><div id="m1-altitude" class="value">--</div></div>
           <div class="card"><div class="label">状态计数</div><div id="m1-status-rx" class="value">--</div></div>
           <div class="card"><div class="label">下行计数</div><div id="m1-down-rx" class="value">--</div></div>
           <div class="card"><div class="label">来电计数</div><div id="m1-incoming-rx" class="value">--</div></div>
@@ -212,6 +214,10 @@ export default {
       document.getElementById("m1-valid").textContent = status.gnss_valid ? "是" : "否";
       document.getElementById("m1-lon").textContent = Number(status.lon_deg).toFixed(6);
       document.getElementById("m1-lat").textContent = Number(status.lat_deg).toFixed(6);
+      document.getElementById("m1-speed").textContent =
+        status.speed != null ? Number(status.speed).toFixed(3) : "--";
+      document.getElementById("m1-altitude").textContent =
+        status.altitude != null ? Number(status.altitude).toFixed(3) : "--";
     }
 
     document.getElementById("m1-status-rx").textContent = data.status_rx_count ?? 0;
