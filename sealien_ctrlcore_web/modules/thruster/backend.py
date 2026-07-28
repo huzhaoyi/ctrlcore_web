@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""TD10A 推进器：/ThrusterStatus 展示 + 模拟 /thruster_command、/obc/thruster_lock 下发。"""
+"""TD10A 推进器：/ThrusterStatus 展示 + /thruster_command、/obc/thruster_lock 下发。
+
+推力保活仅在 stream 开启时周期发布；停止 stream 后不再发 THRUSTER_CMD，
+便于验证 MCU 断流看门狗。上锁/解锁只走 /obc/thruster_lock。
+"""
 
 import queue
 import threading
@@ -45,11 +49,11 @@ def _decode_status_label(code: int) -> str:
     return f"{code} 未知状态码"
 
 
-def _decode_fault_labels(fault: int) -> List[str]:
-    fault_u = int(fault) & 0xFF
+def _decode_fault_labels(fault_raw: int) -> List[str]:
+    fault_u = int(fault_raw) & 0xFFFF
     if fault_u == 0:
         return ["无故障（EF=0）"]
-    return [f"EF 故障字节 0x{fault_u:02X}（TD10A EF 指令，详见手册）"]
+    return [f"EF 原始故障字 0x{fault_u:04X}（TD10A EF 指令，详见手册）"]
 
 
 def _decode_power_lock(lock: int) -> Dict[str, Any]:
@@ -73,7 +77,11 @@ def _build_channel_snapshot(
     temperature_c: int,
     status_code: int,
     error_code: int,
+    fault_raw: int = 0,
 ) -> Dict[str, Any]:
+    raw_fault = int(fault_raw) & 0xFFFF
+    if raw_fault == 0:
+        raw_fault = int(error_code) & 0xFF
     active = index < THRUSTER_ACTIVE_COUNT
     meta = THRUSTER0_META if index == 0 else {}
     return {
@@ -88,22 +96,23 @@ def _build_channel_snapshot(
         "speed_rpm": int(speed_rpm),
         "speed_label": f"{int(speed_rpm)} rpm（QV，正/负=转向约定）",
         "power_w": int(power_w),
-        "power_label": f"{int(power_w)} W（QC×QP 估算，MAVLink float→ROS int16）",
+        "current_a": int(power_w),
+        "power_label": (
+            f"{int(power_w)} A（TD10A QC 电流；字段名 power_w 复用；"
+            "无电压；精度约 ±0.8~1A）"
+        ),
         "temperature_c": int(temperature_c),
         "temperature_label": f"{int(temperature_c)} °C（QT 查询）",
         "thruster_status_code": int(status_code),
         "status_label": _decode_status_label(int(status_code)),
         "status_ok": int(status_code) == 1,
         "thruster_error_code": int(error_code),
-        "fault_hex": f"0x{int(error_code) & 0xFF:02X}",
-        "fault_ok": int(error_code) == 0,
-        "fault_labels": _decode_fault_labels(int(error_code)),
+        "thruster_fault_raw": raw_fault,
+        "fault_hex": f"0x{raw_fault:04X}",
+        "fault_ok": raw_fault == 0,
+        "fault_active": raw_fault != 0,
+        "fault_labels": _decode_fault_labels(raw_fault),
     }
-
-
-@dataclass
-class _ThrusterCmdJob:
-    pwm: list
 
 
 @dataclass
@@ -120,10 +129,10 @@ class ThrusterModule(WebModule):
         self.last_rx_mono_: Optional[float] = None
         self.latest_: Optional[Dict[str, Any]] = None
         self.last_cmd_speed_: int = PWM_NEUTRAL
+        self.stream_enabled_: bool = False
 
         self.cmd_pub_ = None
         self.lock_pub_ = None
-        self.cmd_queue_: queue.Queue = queue.Queue()
         self.lock_queue_: queue.Queue = queue.Queue()
 
     @property
@@ -148,16 +157,17 @@ class ThrusterModule(WebModule):
         if self.cmd_pub_ is None or self.lock_pub_ is None:
             return
 
-        while True:
-            try:
-                job = self.cmd_queue_.get_nowait()
-            except queue.Empty:
-                break
-            msg = ThrusterCommand()
-            msg.pwm = [int(v) for v in job.pwm]
-            msg.thrusts = []
-            msg.thruster_unlocked = True
-            self.cmd_pub_.publish(msg)
+        with self.lock_:
+            stream_on = self.stream_enabled_
+            heartbeat_speed = self.last_cmd_speed_
+
+        # 仅 stream 开启时保活；停止后不再发 THRUSTER_CMD，交给 MCU/网关断流 failsafe。
+        if stream_on:
+            heartbeat_msg = ThrusterCommand()
+            heartbeat_msg.pwm = [int(v) for v in self._build_pwm(heartbeat_speed)]
+            heartbeat_msg.thrusts = []
+            heartbeat_msg.thruster_unlocked = True
+            self.cmd_pub_.publish(heartbeat_msg)
 
         while True:
             try:
@@ -183,12 +193,18 @@ class ThrusterModule(WebModule):
         pwm[0] = self._clamp_speed(speed)
         return pwm
 
-    def _enqueue_cmd(self, speed: int) -> None:
+    def _parse_speed(self, body: Dict[str, Any]) -> Tuple[Optional[int], Optional[str]]:
+        if "speed" in body:
+            return self._clamp_speed(int(body["speed"])), None
+        if "percent" in body:
+            return self._percent_to_speed(body["percent"]), None
+        return None, "need speed (1000~2000) or percent (-100~100)"
+
+    def _set_speed(self, speed: int) -> int:
         clamped = self._clamp_speed(speed)
-        self.cmd_queue_.put(_ThrusterCmdJob(pwm=self._build_pwm(clamped)))
         with self.lock_:
             self.last_cmd_speed_ = clamped
-            self.cmd_tx_count_ += 1
+        return clamped
 
     def _enqueue_lock(self, locked: bool) -> None:
         self.lock_queue_.put(_ThrusterLockJob(locked=bool(locked)))
@@ -196,6 +212,7 @@ class ThrusterModule(WebModule):
             self.lock_tx_count_ += 1
 
     def _on_thruster(self, msg: ThrusterStatus) -> None:
+        fault_raw_values = list(getattr(msg, "thruster_fault_raw", [0] * THRUSTER_ARRAY_SIZE))
         channels = [
             _build_channel_snapshot(
                 i,
@@ -204,6 +221,7 @@ class ThrusterModule(WebModule):
                 msg.temperature_c[i],
                 msg.thruster_status_code[i],
                 msg.thruster_error_code[i],
+                fault_raw_values[i] if i < len(fault_raw_values) else 0,
             )
             for i in range(THRUSTER_ARRAY_SIZE)
         ]
@@ -225,9 +243,15 @@ class ThrusterModule(WebModule):
             "power_lock_ok": not power_lock["locked"],
             "speed_rpm": [int(v) for v in msg.speed_rpm],
             "power_w": [int(v) for v in msg.power_w],
+            "current_a": [int(v) for v in msg.power_w],
+            "power_field_note": "TD10A：power_w 实为 QC 电流 A，无电压，精度约 ±0.8~1A",
             "temperature_c": [int(v) for v in msg.temperature_c],
             "thruster_status_code": [int(v) for v in msg.thruster_status_code],
             "thruster_error_code": [int(v) for v in msg.thruster_error_code],
+            "thruster_fault_raw": [
+                int(fault_raw_values[i]) if i < len(fault_raw_values) else 0
+                for i in range(THRUSTER_ARRAY_SIZE)
+            ],
             "channels": channels,
             "stamp_sec": float(msg.header.stamp.sec),
             "stamp_nanosec": int(msg.header.stamp.nanosec),
@@ -241,6 +265,7 @@ class ThrusterModule(WebModule):
             snapshot["lock_tx_count"] = self.lock_tx_count_
             snapshot["last_cmd_speed"] = self.last_cmd_speed_
             snapshot["last_cmd_percent"] = round(_pwm_to_percent(self.last_cmd_speed_), 1)
+            snapshot["stream_enabled"] = self.stream_enabled_
             self.latest_ = snapshot
 
     def get_snapshot(self) -> Dict[str, Any]:
@@ -254,6 +279,7 @@ class ThrusterModule(WebModule):
                     "lock_tx_count": self.lock_tx_count_,
                     "last_cmd_speed": self.last_cmd_speed_,
                     "last_cmd_percent": round(_pwm_to_percent(self.last_cmd_speed_), 1),
+                    "stream_enabled": self.stream_enabled_,
                     "status_topic": THRUSTER_STATUS_TOPIC,
                     "hardware": THRUSTER_HARDWARE,
                     "pwm_range": [PWM_MIN, PWM_NEUTRAL, PWM_MAX],
@@ -263,6 +289,9 @@ class ThrusterModule(WebModule):
             if self.last_rx_mono_ is not None:
                 data["age_sec"] = round(time.monotonic() - self.last_rx_mono_, 3)
             data["pwm_range"] = [PWM_MIN, PWM_NEUTRAL, PWM_MAX]
+            data["stream_enabled"] = self.stream_enabled_
+            data["last_cmd_speed"] = self.last_cmd_speed_
+            data["last_cmd_percent"] = round(_pwm_to_percent(self.last_cmd_speed_), 1)
             return data
 
     def is_alive(self, now_sec: float, stale_sec: float) -> bool:
@@ -276,39 +305,78 @@ class ThrusterModule(WebModule):
         if self.cmd_pub_ is None or self.lock_pub_ is None:
             return 503, {"ok": False, "error": "thruster publishers not ready"}
 
-        if action == "cmd":
-            speed: Optional[int] = None
-            if "speed" in body:
-                speed = self._clamp_speed(int(body["speed"]))
-            elif "percent" in body:
-                speed = self._percent_to_speed(body["percent"])
-            else:
-                return 400, {"ok": False, "error": "need speed (1000~2000) or percent (-100~100)"}
-
-            self._enqueue_cmd(speed)
+        if action == "stream_start":
+            speed, err = self._parse_speed(body) if ("speed" in body or "percent" in body) else (None, None)
+            if err:
+                return 400, {"ok": False, "error": err}
+            if speed is None:
+                with self.lock_:
+                    speed = self.last_cmd_speed_
+            speed = self._set_speed(speed)
             with self.lock_:
+                self.stream_enabled_ = True
+                self.cmd_tx_count_ += 1
+                cmd_tx_count = self.cmd_tx_count_
+            return 200, {
+                "ok": True,
+                "stream_enabled": True,
+                "speed": speed,
+                "percent": round(_pwm_to_percent(speed), 1),
+                "cmd_tx_count": cmd_tx_count,
+                "note": "已开启周期保活；停止后 MCU 应触发断流看门狗",
+            }
+
+        if action == "stream_stop":
+            with self.lock_:
+                self.stream_enabled_ = False
+                cmd_tx_count = self.cmd_tx_count_
+            return 200, {
+                "ok": True,
+                "stream_enabled": False,
+                "cmd_tx_count": cmd_tx_count,
+                "note": "已停止 THRUSTER_CMD 保活，等待 MCU/网关断流 failsafe",
+            }
+
+        if action == "cmd":
+            speed, err = self._parse_speed(body)
+            if err:
+                return 400, {"ok": False, "error": err}
+            assert speed is not None
+            with self.lock_:
+                stream_on = self.stream_enabled_
+            speed = self._set_speed(speed)
+            with self.lock_:
+                if stream_on:
+                    self.cmd_tx_count_ += 1
                 cmd_tx_count = self.cmd_tx_count_
             return 200, {
                 "ok": True,
                 "speed": speed,
                 "percent": round(_pwm_to_percent(speed), 1),
                 "pwm0": speed,
+                "stream_enabled": stream_on,
                 "cmd_tx_count": cmd_tx_count,
                 "note": (
-                    f"已排队 {THRUSTER_CMD_TOPIC} → MAVLink THRUSTER_CMD；"
-                    f"MCU PWM {speed} → TC {_pwm_to_percent(speed):+.0f}%"
+                    f"目标已更新 PWM={speed}；"
+                    + ("正在周期下发" if stream_on else "未开周期，尚未下发（请先点周期发送）")
                 ),
             }
 
         if action == "neutral":
-            self._enqueue_cmd(PWM_NEUTRAL)
             with self.lock_:
+                stream_on = self.stream_enabled_
+            speed = self._set_speed(PWM_NEUTRAL)
+            with self.lock_:
+                if stream_on:
+                    self.cmd_tx_count_ += 1
                 cmd_tx_count = self.cmd_tx_count_
             return 200, {
                 "ok": True,
-                "speed": PWM_NEUTRAL,
+                "speed": speed,
                 "percent": 0.0,
+                "stream_enabled": stream_on,
                 "cmd_tx_count": cmd_tx_count,
+                "note": "目标已归中 1500" + ("（周期中）" if stream_on else "（未开周期）"),
             }
 
         if action == "lock":

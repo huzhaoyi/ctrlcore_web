@@ -2,6 +2,7 @@ import { postModule } from "../../core/api.js";
 
 const ESC_MIN = 10;
 const ESC_MAX = 90;
+const RPM_MAX = 3240;
 
 function setText(id, text) {
   const el = document.getElementById(id);
@@ -16,6 +17,14 @@ function fmtPct(value, fallback = "—") {
     return fallback;
   }
   return `${num} %`;
+}
+
+function fmtRpm(value, fallback = "—") {
+  const num = Number(value);
+  if (!Number.isFinite(num)) {
+    return fallback;
+  }
+  return `${num} rpm`;
 }
 
 function cmdLabel(duty) {
@@ -71,6 +80,16 @@ function pumpDutySectionHtml(prefix, title) {
           </div>
           <p class="hint" style="margin:6px 0 0">有效区 ${ESC_MIN}~${ESC_MAX} %（&lt;${ESC_MIN} → ${ESC_MIN} % 停泵）</p>
         </div>
+      </div>
+      <div style="margin-top:16px">
+        <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px">
+          <span class="hint" style="margin:0">估算转速（占空比映射，非编码器）</span>
+          <span id="${prefix}-rpm-label" class="value mono-block" style="margin:0;font-size:1rem">—</span>
+        </div>
+        <div style="height:10px;border-radius:999px;background:rgba(0,0,0,0.35);border:1px solid var(--border);overflow:hidden">
+          <div id="${prefix}-rpm-bar" style="height:100%;width:0%;background:var(--accent);transition:width 0.2s ease"></div>
+        </div>
+        <p class="hint" style="margin:6px 0 0">映射 ${ESC_MIN}%→0rpm · ${ESC_MAX}%→${RPM_MAX}rpm</p>
       </div>
     </div>
   `;
@@ -209,10 +228,14 @@ export default {
     setText("pp1-cmd-label", cmdLabel(data.duty_cmd_ch1));
     setText("pp0-out-label", fmtPct(data.duty_out_ch0));
     setText("pp1-out-label", fmtPct(data.duty_out_ch1));
+    setText("pp0-rpm-label", fmtRpm(data.rpm_est_ch0));
+    setText("pp1-rpm-label", fmtRpm(data.rpm_est_ch1));
 
     setDutyBar("pp0-cmd-bar", data.duty_cmd_ch0, ESC_MAX);
     setDutyBar("pp1-cmd-bar", data.duty_cmd_ch1, ESC_MAX);
     setDutyBar("pp0-out-bar", data.duty_out_ch0, ESC_MAX);
     setDutyBar("pp1-out-bar", data.duty_out_ch1, ESC_MAX);
+    setDutyBar("pp0-rpm-bar", data.rpm_est_ch0, RPM_MAX);
+    setDutyBar("pp1-rpm-bar", data.rpm_est_ch1, RPM_MAX);
   },
 };

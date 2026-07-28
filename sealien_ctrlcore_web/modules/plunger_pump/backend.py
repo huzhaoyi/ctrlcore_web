@@ -21,6 +21,7 @@ PLUNGER_HARDWARE = "pwm3 PC8/PC9 · ESCON 50/5 ×2 · DigIN1 PWM @1kHz · Studio
 PLUNGER_DUTY_OBC_MAX = 100
 PLUNGER_DUTY_ESC_MIN = 10
 PLUNGER_DUTY_ESC_MAX = 90
+PLUNGER_RPM_MAX = 3240
 
 
 class PlungerPumpModule(WebModule):
@@ -58,12 +59,16 @@ class PlungerPumpModule(WebModule):
             "mcn_topic": "plunger_pump",
             "hardware": PLUNGER_HARDWARE,
             "timestamp_ms": int(msg.timestamp_ms),
+            "rpm_est_ch0": int(msg.rpm_est_ch0),
+            "rpm_est_ch1": int(msg.rpm_est_ch1),
             "duty_cmd_ch0": int(msg.duty_cmd_ch0),
             "duty_cmd_ch1": int(msg.duty_cmd_ch1),
             "duty_out_ch0": int(msg.duty_out_ch0),
             "duty_out_ch1": int(msg.duty_out_ch1),
             "esc_duty_range": [PLUNGER_DUTY_ESC_MIN, PLUNGER_DUTY_ESC_MAX],
             "obc_duty_range": [0, PLUNGER_DUTY_OBC_MAX],
+            "rpm_est_range": [0, PLUNGER_RPM_MAX],
+            "rpm_note": "估算转速（占空比映射，非编码器）",
             "stamp_sec": float(msg.header.stamp.sec),
             "stamp_nanosec": int(msg.header.stamp.nanosec),
             "frame_id": str(msg.header.frame_id),
@@ -87,6 +92,8 @@ class PlungerPumpModule(WebModule):
                     "cmd_topic": PLUNGER_CMD_TOPIC,
                     "hardware": PLUNGER_HARDWARE,
                     "esc_duty_range": [PLUNGER_DUTY_ESC_MIN, PLUNGER_DUTY_ESC_MAX],
+                    "rpm_est_range": [0, PLUNGER_RPM_MAX],
+                    "rpm_note": "估算转速（占空比映射，非编码器）",
                 }
             data = dict(self.latest_)
             data["connected"] = True
