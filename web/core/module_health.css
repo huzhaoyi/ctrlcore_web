@@ -1,0 +1,35 @@
+.nav-btn {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.nav-status-dot {
+  width: 9px;
+  height: 9px;
+  flex: 0 0 9px;
+  border-radius: 50%;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.05);
+}
+
+.nav-status-dot.online {
+  background: var(--ok);
+  box-shadow: 0 0 8px rgba(61, 214, 140, 0.65);
+}
+
+.nav-status-dot.offline {
+  background: var(--bad);
+  box-shadow: 0 0 8px rgba(243, 18, 96, 0.55);
+}
+
+.status-ok {
+  color: var(--ok);
+}
+
+.status-bad {
+  color: var(--bad);
+}
+
+.status-warn {
+  color: var(--warn);
+}

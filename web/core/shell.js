@@ -1,4 +1,8 @@
 import { fetchMeta, fetchSnapshot } from "./api.js";
+import {
+  getModuleHealth,
+  markAllModulesOffline,
+} from "./module_health.mjs";
 
 const POLL_MS = 500;
 
@@ -43,7 +47,15 @@ export class AppShell {
     btn.type = "button";
     btn.className = "nav-btn";
     btn.dataset.moduleId = panel.id;
-    btn.textContent = panel.title;
+    const statusDot = document.createElement("span");
+    statusDot.className = "nav-status-dot offline";
+    statusDot.dataset.role = "module-health";
+    statusDot.setAttribute("role", "img");
+    statusDot.setAttribute("aria-label", "离线");
+
+    const label = document.createElement("span");
+    label.textContent = panel.title;
+    btn.append(statusDot, label);
     btn.addEventListener("click", () => this.showModule(panel.id));
     this.navEl.appendChild(btn);
   }
@@ -95,6 +107,13 @@ export class AppShell {
       this._updateActivePanel(snapshot);
     } catch (err) {
       const detail = err && err.message ? err.message : String(err);
+      const offlineSnapshot = markAllModulesOffline(
+        this.lastSnapshot,
+        this.modules.keys(),
+      );
+      this.lastSnapshot = offlineSnapshot;
+      this._updateModuleHealth(offlineSnapshot);
+      this._updateActivePanel(offlineSnapshot);
       this.linkBadge.textContent = "API 异常";
       this.linkBadge.title =
         `无法访问 /api/snapshot：${detail}。请确认通过 http://本机IP:8081 打开，且 ctrlcore_web_node 已启动。`;
@@ -103,7 +122,22 @@ export class AppShell {
     }
   }
 
+  _updateModuleHealth(snapshot) {
+    for (const btn of this.navEl.querySelectorAll(".nav-btn")) {
+      const health = getModuleHealth(snapshot, btn.dataset.moduleId);
+      const dot = btn.querySelector('[data-role="module-health"]');
+      if (!dot) {
+        continue;
+      }
+      dot.classList.toggle("online", health.online);
+      dot.classList.toggle("offline", !health.online);
+      dot.setAttribute("aria-label", health.label);
+      dot.title = health.label;
+    }
+  }
+
   _updateChrome(snapshot) {
+    this._updateModuleHealth(snapshot);
     const linkOk = Boolean(snapshot.link_ok);
     this.linkBadge.textContent = linkOk ? "MCU 在线" : "MCU 离线";
     this.linkBadge.title = linkOk
