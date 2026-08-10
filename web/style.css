@@ -217,6 +217,25 @@ td.mono {
   color: var(--text);
 }
 
+.control-row input[type="range"].thr-speed-range {
+  flex: 1 1 420px;
+  min-width: 320px;
+  max-width: 100%;
+  height: 28px;
+  cursor: pointer;
+}
+
+.control-row input[type="number"].thr-speed-num {
+  width: 110px;
+  min-width: 96px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: #0f1419;
+  color: var(--text);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
 button {
   padding: 10px 16px;
   border-radius: 8px;
@@ -228,6 +247,16 @@ button {
 
 button:hover {
   background: rgba(61, 139, 253, 0.32);
+}
+
+button.is-active {
+  border-color: rgba(61, 214, 140, 0.65);
+  background: rgba(61, 214, 140, 0.22);
+}
+
+button.is-active-warn {
+  border-color: rgba(255, 176, 32, 0.7);
+  background: rgba(255, 176, 32, 0.22);
 }
 
 .mixed-dev-panel h2 {

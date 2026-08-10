@@ -1,9 +1,27 @@
 import { postModule } from "../../core/api.js";
 import { gpioLevelText } from "./level.mjs";
 
-const VALVE_COUNT = 2;
-const VALVE_LABELS = ["阀1(高压)", "阀2(低压)"];
-const VALVE_GPIO_HINTS = ["DEV4 P1 PIN0 (24V/P4)", "DEV4 P1 PIN1 (24V/P4)"];
+const VALVE_COUNT = 8;
+const VALVE_LABELS = [
+  "GPIO0(阀1高压)",
+  "GPIO1(阀2低压)",
+  "GPIO2",
+  "GPIO3",
+  "GPIO4",
+  "GPIO5",
+  "GPIO6",
+  "GPIO7",
+];
+const VALVE_GPIO_HINTS = [
+  "DEV4 P1 PIN0 (24V/P4)",
+  "DEV4 P1 PIN1 (24V/P4)",
+  "DEV4 P1 PIN2 (24V/P4)",
+  "DEV4 P1 PIN3 (24V/P4)",
+  "DEV4 P1 PIN4 (24V/P4)",
+  "DEV4 P1 PIN5 (24V/P4)",
+  "DEV4 P1 PIN6 (24V/P4)",
+  "DEV4 P1 PIN7 (24V/P4)",
+];
 
 function setText(id, text) {
   const el = document.getElementById(id);
@@ -54,7 +72,7 @@ async function sendCmd(index, value, resultEl) {
 
 export default {
   id: "payload_en",
-  title: "电磁阀×2",
+  title: "GPIO×8",
 
   mount(root) {
     root.innerHTML = `
@@ -72,7 +90,7 @@ export default {
         <p class="hint">
           状态链：TCA9535 DEV4 P1 输出读回
           → MAVLink <code>SWITCH_STATUS (id=9, 10Hz)</code>
-          → ROS <code>/Switch</code>（switchs[0..1] 有效）。
+          → ROS <code>/Switch</code>（switchs[0..7] 有效）。
         </p>
         <p class="hint">
           命令链：Web → ROS <code>/obc/switch_cmd</code>
@@ -82,14 +100,14 @@ export default {
       </section>
 
       <section class="panel">
-        <h2>电磁阀状态</h2>
+        <h2>GPIO 状态</h2>
         <div class="card-grid" style="grid-template-columns:repeat(auto-fit,minmax(200px,1fr))">
           ${buildValveCards()}
         </div>
         <div class="control-row" style="margin-top:14px">
           <button id="en-all-off" type="button">全部关闭</button>
         </div>
-        <div id="en-cmd-result" class="hint">阀控为执行器操作，请谨慎；极性为高有效（1=开）。</div>
+        <div id="en-cmd-result" class="hint">GPIO 为执行器操作，请谨慎；极性为高有效（1=开）。</div>
       </section>
     `;
 
@@ -107,7 +125,7 @@ export default {
       try {
         const { data } = await postModule("payload_en", "all_off", {});
         if (data.ok) {
-          resultEl.textContent = "已下发两路阀全部关闭";
+          resultEl.textContent = "已下发 8 路 GPIO 全部关闭";
         } else {
           resultEl.textContent = `失败：${data.error || "unknown"}`;
         }

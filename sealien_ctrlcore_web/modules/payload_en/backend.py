@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""AUV 电磁阀×2：TCA9535 I2C GPIO · /Switch + /obc/switch_cmd。
+"""AUV GPIO×8：TCA9535 I2C GPIO · /Switch + /obc/switch_cmd。
 
-index 0 ↔ 阀1(高压) · index 1 ↔ 阀2(低压)
-↔ MAVLink SWITCH_CMD / SWITCH_STATUS。
+index 0~7 ↔ DEV4 P1 PIN0~7 ↔ MAVLink SWITCH_CMD / SWITCH_STATUS。
 """
 
 import threading
@@ -18,11 +17,29 @@ from sealien_ctrlcore_web.core.base_module import WebModule
 
 SWITCH_STATUS_TOPIC = "/Switch"
 SWITCH_CMD_TOPIC = "/obc/switch_cmd"
-VALVE_COUNT = 2
-VALVE_LABELS: List[str] = ["阀1(高压)", "阀2(低压)"]
-VALVE_GPIO_HINTS: List[str] = ["DEV4 P1 PIN0 (24V/P4)", "DEV4 P1 PIN1 (24V/P4)"]
+VALVE_COUNT = 8
+VALVE_LABELS: List[str] = [
+    "GPIO0(阀1高压)",
+    "GPIO1(阀2低压)",
+    "GPIO2",
+    "GPIO3",
+    "GPIO4",
+    "GPIO5",
+    "GPIO6",
+    "GPIO7",
+]
+VALVE_GPIO_HINTS: List[str] = [
+    "DEV4 P1 PIN0 (24V/P4)",
+    "DEV4 P1 PIN1 (24V/P4)",
+    "DEV4 P1 PIN2 (24V/P4)",
+    "DEV4 P1 PIN3 (24V/P4)",
+    "DEV4 P1 PIN4 (24V/P4)",
+    "DEV4 P1 PIN5 (24V/P4)",
+    "DEV4 P1 PIN6 (24V/P4)",
+    "DEV4 P1 PIN7 (24V/P4)",
+]
 PAYLOAD_EN_HARDWARE = (
-    "TCA9535 软件I2C1 PB3/PB4 · DEV4 P1 PIN0/1 · 24V/1A · 高有效 · 默认全关"
+    "TCA9535 软件I2C1 PB3/PB4 · DEV4 P1 PIN0~7 · 24V/1A · 高有效 · 默认全关"
 )
 
 
@@ -41,7 +58,7 @@ class PayloadEnModule(WebModule):
 
     @property
     def title(self) -> str:
-        return "电磁阀×2"
+        return "GPIO×8"
 
     def register(self, node: Node) -> None:
         self.cmd_pub_ = node.create_publisher(SwitchCmd, SWITCH_CMD_TOPIC, 10)

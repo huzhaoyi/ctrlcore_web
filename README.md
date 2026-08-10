@@ -57,7 +57,7 @@ ros2 launch sealien_ctrlcore_web ctrlcore_web.launch.py
 | `m1` | 天通卫通 M1 | `/m1/status`, `/m1/downlink`, `/m1/link_state` | `/m1/uplink`, `/m1/call_cmd` |
 | `depth` | Keller 深度 | `/DepthStatus` | — |
 | `wire_displacement` | 拉线位移 | `/WireDisplacementStatus` | — |
-| `payload_en` | 电磁阀×2 | `/Switch` | `/obc/switch_cmd` |
+| `payload_en` | GPIO×8 | `/Switch` | `/obc/switch_cmd` |
 | `bms` | 电池管理 | `/BmsStatus` | `/obc/bms_mos_cmd` |
 
 完整列表见 `web/modules.manifest.json` 与 `config/web_modules.yaml`。

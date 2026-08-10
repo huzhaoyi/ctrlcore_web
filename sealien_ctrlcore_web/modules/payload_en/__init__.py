@@ -1,1 +1,1 @@
-# AUV 电磁阀×2（TCA9535 / SWITCH_CMD）web module
+# AUV GPIO×8（TCA9535 DEV4 P1 / SWITCH_CMD）web module
