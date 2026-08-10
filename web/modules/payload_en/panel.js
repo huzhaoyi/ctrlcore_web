@@ -6,7 +6,7 @@ const VALVE_LABELS = [
   "GPIO0(阀1高压)",
   "GPIO1(阀2低压)",
   "GPIO2(声呐24V)",
-  "GPIO3",
+  "GPIO3(抛载)",
   "GPIO4",
   "GPIO5",
   "GPIO6",
@@ -16,7 +16,7 @@ const VALVE_GPIO_HINTS = [
   "DEV4 P1 PIN0 (24V/P4)",
   "DEV4 P1 PIN1 (24V/P4)",
   "DEV4 P1 PIN2 (24V/P4 · 声呐开关)",
-  "DEV4 P1 PIN3 (24V/P4)",
+  "DEV4 P1 PIN3 (24V/P4 · 抛载，拉高即丢，慎重)",
   "DEV4 P1 PIN4 (24V/P4)",
   "DEV4 P1 PIN5 (24V/P4)",
   "DEV4 P1 PIN6 (24V/P4)",
@@ -41,14 +41,19 @@ function stateClass(value) {
 function buildValveCards() {
   const cards = [];
   for (let index = 0; index < VALVE_COUNT; index += 1) {
+    const caution =
+      index === 3
+        ? `<div class="hint en-caution">⚠ 开启则 AUV 抛载丢弃，操作请慎重</div>`
+        : "";
     cards.push(`
-      <div class="card en-card" id="en-card-${index}">
+      <div class="card en-card${index === 3 ? " en-card-danger" : ""}" id="en-card-${index}">
         <div class="label">${VALVE_LABELS[index]} · index ${index}</div>
         <div class="value en-state" id="en-state-${index}">—</div>
         <div class="hint mono-block">GPIO 输出：<span id="en-level-${index}">—</span></div>
         <div class="hint mono-block" id="en-gpio-${index}">${VALVE_GPIO_HINTS[index]}</div>
+        ${caution}
         <div class="control-row" style="margin-top:10px">
-          <button type="button" class="en-btn-on" data-index="${index}" data-value="1">开</button>
+          <button type="button" class="en-btn-on${index === 3 ? " is-active-warn" : ""}" data-index="${index}" data-value="1">开</button>
           <button type="button" class="en-btn-off" data-index="${index}" data-value="0">关</button>
         </div>
       </div>
@@ -107,7 +112,7 @@ export default {
         <div class="control-row" style="margin-top:14px">
           <button id="en-all-off" type="button">全部关闭</button>
         </div>
-        <div id="en-cmd-result" class="hint">GPIO 为执行器操作，请谨慎；极性为高有效（1=开）。</div>
+        <div id="en-cmd-result" class="hint">GPIO 为执行器操作，请谨慎；极性为高有效（1=开）。GPIO3 抛载：开启即丢，务必确认。</div>
       </section>
     `;
 
@@ -117,6 +122,15 @@ export default {
       btn.addEventListener("click", async () => {
         const index = Number(btn.dataset.index);
         const value = Number(btn.dataset.value);
+        if (index === 3 && value === 1) {
+          const ok = window.confirm(
+            "GPIO3 为抛载通道：开启后 AUV 将立即抛掉载荷。\n确认继续？",
+          );
+          if (!ok) {
+            resultEl.textContent = "已取消 GPIO3 抛载开启";
+            return;
+          }
+        }
         await sendCmd(index, value, resultEl);
       });
     }

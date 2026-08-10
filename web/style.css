@@ -317,6 +317,16 @@ button.is-active-warn {
   background: rgba(243, 18, 96, 0.28);
 }
 
+.en-card-danger {
+  border-color: rgba(245, 165, 36, 0.55);
+}
+
+.en-caution {
+  color: var(--warn);
+  font-weight: 600;
+  margin-top: 6px;
+}
+
 @media (max-width: 800px) {
   .layout {
     grid-template-columns: 1fr;
