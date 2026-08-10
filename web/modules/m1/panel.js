@@ -8,7 +8,7 @@ export default {
     root.innerHTML = `
       <section class="panel">
         <h2>卫星端到端链路</h2>
-        <p class="hint">需启动 <code>sealien_ctrlcore_SatTask</code> 后才有 <code>/m1/link_state</code>（SatTask 心跳监测）。</p>
+        <p class="hint">需启动 <code>sealien_ctrlcore_sat_task</code> 后才有 <code>/m1/link_state</code>（sat_task 心跳监测）。</p>
         <div class="card-grid">
           <div class="card"><div class="label">链路话题</div><div id="m1-link-topic" class="value mono-block">/m1/link_state</div></div>
           <div class="card"><div class="label">链路态</div><div id="m1-link-state-name" class="value">--</div></div>
@@ -190,7 +190,7 @@ export default {
       document.getElementById("m1-hb-counts").textContent =
         `${link.hb_tx_count ?? 0} / ${link.hb_rx_count ?? 0}`;
     } else {
-      document.getElementById("m1-link-state-name").textContent = "—（未启动 SatTask）";
+      document.getElementById("m1-link-state-name").textContent = "—（未启动 sat_task）";
       document.getElementById("m1-link-ok").textContent = "—";
       document.getElementById("m1-call-connected").textContent = "—";
       document.getElementById("m1-peer-hb-age").textContent = "—";

@@ -21,7 +21,7 @@ VALVE_COUNT = 8
 VALVE_LABELS: List[str] = [
     "GPIO0(阀1高压)",
     "GPIO1(阀2低压)",
-    "GPIO2",
+    "GPIO2(声呐24V)",
     "GPIO3",
     "GPIO4",
     "GPIO5",
@@ -31,7 +31,7 @@ VALVE_LABELS: List[str] = [
 VALVE_GPIO_HINTS: List[str] = [
     "DEV4 P1 PIN0 (24V/P4)",
     "DEV4 P1 PIN1 (24V/P4)",
-    "DEV4 P1 PIN2 (24V/P4)",
+    "DEV4 P1 PIN2 (24V/P4 · 声呐开关)",
     "DEV4 P1 PIN3 (24V/P4)",
     "DEV4 P1 PIN4 (24V/P4)",
     "DEV4 P1 PIN5 (24V/P4)",
