@@ -10,6 +10,12 @@ scripts/install/
 scripts/log/
 scripts/build/
 
+# Local Git worktrees
+.worktrees/
+
+# Local design/plan docs (do not publish)
+docs/
+
 # IDE
 .vscode/
 .idea/
