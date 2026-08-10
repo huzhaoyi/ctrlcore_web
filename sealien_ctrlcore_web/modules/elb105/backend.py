@@ -5,17 +5,19 @@
 import queue
 import threading
 import time
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, Optional, Tuple
 
-import rclpy
 from rclpy.node import Node
 from rclpy.qos import qos_profile_sensor_data
 
 from sealien_ctrlpilot_msgmanagement.msg._elb105_shzr04 import Elb105Shzr04
 from sealien_ctrlpilot_msgmanagement.srv import Elb105SendAlignment
 from sealien_ctrlcore_web.core.base_module import WebModule
+from sealien_ctrlcore_web.modules.elb105.alignment_timer import AlignmentTimer
+from sealien_ctrlcore_web.modules.elb105.dvl_update_latch import DvlUpdateLatch
 
-ELB105_HARDWARE = "OBC RS422 USB · ELB105-SHZR04(3) · 921600 · SHZR04 147B"
+ELB105_HARDWARE = "OBC RS422 USB · ELB105-SHZR04(3) · 460800 · SHZR04 147B"
+ALIGNMENT_SERVICE_TIMEOUT_SEC = 3.0
 
 ALIGNMENT_LABELS = {
     0: "0 待机 (Standby)",
@@ -25,28 +27,15 @@ ALIGNMENT_LABELS = {
 }
 
 DVL_UPDATE_LABELS = {
-    0: "0 未更新 (DVL data not updated)",
-    1: "1 已更新 (DVL data updated)",
+    0: "0 本帧未更新",
+    1: "1 本帧已更新",
 }
 
-DVL_VALID_BIT_LABELS = {
-    0x01: "Bit0 DVL 数据有效",
-    0x02: "Bit1 对底高度有效",
+DVL_MODE_LABELS = {
+    0: "0 无效",
+    1: "1 对底",
+    7: "7 对流",
 }
-
-
-def _decode_bit_flags(flags: int, bit_map: Dict[int, str], ok_label: str) -> List[str]:
-    if flags == 0:
-        return [ok_label]
-    labels = []
-    for bit_val, label in bit_map.items():
-        if flags & bit_val:
-            labels.append(label)
-    return labels or [f"未知标志 0x{flags:02X}"]
-
-
-def _decode_dvl_valid_flags(flags: int) -> List[str]:
-    return _decode_bit_flags(flags, DVL_VALID_BIT_LABELS, "DVL 无效 (无有效位)")
 
 
 class Elb105Module(WebModule):
@@ -59,7 +48,11 @@ class Elb105Module(WebModule):
         self.node_: Optional[Node] = None
         self.align_client_ = None
         self.align_queue_: queue.Queue = queue.Queue()
+        self.align_pending_lock_ = threading.Lock()
+        self.align_pending_: Dict[Any, float] = {}
         self.last_align_result_: Optional[Dict[str, Any]] = None
+        self.alignment_timer_ = AlignmentTimer(duration_sec=900.0)
+        self.dvl_update_latch_ = DvlUpdateLatch(window_sec=1.5)
 
     @property
     def module_id(self) -> str:
@@ -88,13 +81,32 @@ class Elb105Module(WebModule):
         if self.align_client_ is None or self.node_ is None:
             return
 
+        now_mono = time.monotonic()
+        with self.align_pending_lock_:
+            expired_futures = [
+                future
+                for future, started_mono in self.align_pending_.items()
+                if now_mono - started_mono >= ALIGNMENT_SERVICE_TIMEOUT_SEC
+            ]
+            for future in expired_futures:
+                self.align_pending_.pop(future, None)
+
+        for future in expired_futures:
+            self.align_client_.remove_pending_request(future)
+            future.cancel()
+            with self.lock_:
+                self.last_align_result_ = {
+                    "ok": False,
+                    "message": "alignment service call timeout",
+                }
+
         while True:
             try:
                 body = self.align_queue_.get_nowait()
             except queue.Empty:
-                break
+                return
 
-            if not self.align_client_.wait_for_service(timeout_sec=0.5):
+            if not self.align_client_.wait_for_service(timeout_sec=0.0):
                 with self.lock_:
                     self.last_align_result_ = {
                         "ok": False,
@@ -108,20 +120,34 @@ class Elb105Module(WebModule):
             req.altitude_m = float(body.get("altitude_m", 8.0))
 
             future = self.align_client_.call_async(req)
-            rclpy.spin_until_future_complete(self.node_, future, timeout_sec=3.0)
+            with self.align_pending_lock_:
+                self.align_pending_[future] = time.monotonic()
+            future.add_done_callback(self._on_alignment_done)
 
-            with self.lock_:
-                if future.result() is not None:
-                    resp = future.result()
-                    self.last_align_result_ = {
-                        "ok": bool(resp.success),
-                        "message": str(resp.message),
-                    }
-                else:
-                    self.last_align_result_ = {
-                        "ok": False,
-                        "message": "alignment service call timeout",
-                    }
+    def _on_alignment_done(self, future: Any) -> None:
+        with self.align_pending_lock_:
+            started_mono = self.align_pending_.pop(future, None)
+        if started_mono is None:
+            return
+
+        try:
+            response = future.result()
+            result = {
+                "ok": bool(response.success),
+                "message": str(response.message),
+            }
+        except Exception as exc:
+            result = {
+                "ok": False,
+                "message": f"alignment service call failed: {exc}",
+            }
+            if self.node_ is not None:
+                self.node_.get_logger().error(
+                    f"ELB105 alignment service response failed: {exc}"
+                )
+
+        with self.lock_:
+            self.last_align_result_ = result
 
     def handle_post(self, action: str, body: Dict[str, Any]) -> Tuple[int, Dict[str, Any]]:
         if action == "align":
@@ -133,6 +159,7 @@ class Elb105Module(WebModule):
         alignment_status = int(msg.alignment_status)
         dvl_data_updated = int(msg.dvl_data_updated)
         dvl_valid_flags = int(msg.dvl_valid_flags)
+        now_mono = time.monotonic()
         snapshot = {
             "topic": self.topic_name_,
             "hardware": ELB105_HARDWARE,
@@ -173,21 +200,30 @@ class Elb105Module(WebModule):
             "dvl_mount_error_deg": float(msg.dvl_mount_error_deg),
             "dvl_valid_flags": dvl_valid_flags,
             "dvl_valid_flags_hex": f"0x{dvl_valid_flags:02X}",
-            "dvl_valid_ok": dvl_valid_flags != 0,
-            "dvl_valid_labels": _decode_dvl_valid_flags(dvl_valid_flags),
+            "dvl_valid_ok": dvl_valid_flags in (1, 7),
+            "dvl_mode_label": DVL_MODE_LABELS.get(
+                dvl_valid_flags, f"未知 ({dvl_valid_flags})"
+            ),
             "stamp_sec": float(msg.header.stamp.sec),
             "stamp_nanosec": int(msg.header.stamp.nanosec),
             "frame_id": str(msg.header.frame_id),
         }
         with self.lock_:
             self.rx_count_ += 1
-            self.last_rx_mono_ = time.monotonic()
+            self.alignment_timer_.update(alignment_status, now_mono)
+            self.dvl_update_latch_.update(dvl_data_updated, now_mono)
+            snapshot.update(
+                self.alignment_timer_.snapshot(alignment_status, now_mono)
+            )
+            snapshot.update(self.dvl_update_latch_.snapshot(now_mono))
+            self.last_rx_mono_ = now_mono
             snapshot["rx_count"] = self.rx_count_
             if self.last_align_result_ is not None:
                 snapshot["last_align"] = dict(self.last_align_result_)
             self.latest_ = snapshot
 
     def get_snapshot(self) -> Dict[str, Any]:
+        now_mono = time.monotonic()
         with self.lock_:
             if self.latest_ is None:
                 data = {
@@ -197,13 +233,19 @@ class Elb105Module(WebModule):
                     "topic": self.topic_name_,
                     "hardware": ELB105_HARDWARE,
                 }
+                data.update(self.dvl_update_latch_.snapshot(now_mono))
                 if self.last_align_result_ is not None:
                     data["last_align"] = dict(self.last_align_result_)
                 return data
             data = dict(self.latest_)
             data["connected"] = True
             if self.last_rx_mono_ is not None:
-                data["age_sec"] = round(time.monotonic() - self.last_rx_mono_, 3)
+                data["age_sec"] = round(now_mono - self.last_rx_mono_, 3)
+            alignment_status = int(data.get("alignment_status", -1))
+            data.update(
+                self.alignment_timer_.snapshot(alignment_status, now_mono)
+            )
+            data.update(self.dvl_update_latch_.snapshot(now_mono))
             return data
 
     def is_alive(self, now_sec: float, stale_sec: float) -> bool:
