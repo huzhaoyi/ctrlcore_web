@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""AUV 10Nm 舵机：/GsStatus 展示 + /obc/gs_cmd 下发（网关透传，角度限幅在 MCU）。"""
+"""AUV 10Nm 舵机：/GsStatus 展示 + /obc/gs_cmd 下发（网关透传）。"""
 
 import threading
 import time
@@ -16,9 +16,14 @@ GS_CHANNEL_COUNT = 4
 GS_STATUS_TOPIC = "/GsStatus"
 GS_CMD_TOPIC = "/obc/gs_cmd"
 
-# MCU 侧机械限幅（servo_config_auv.h），Web/OBC 不钳位，仅用于说明
+# MCU 侧机械限幅，Web/OBC 不钳位，仅用于说明
 MCU_ANGLE_MIN_DEG = -45.0
 MCU_ANGLE_MAX_DEG = 45.0
+MCU_SPEED_MIN_DPS = 6.0
+MCU_SPEED_MAX_DPS = 45.0
+GS_CMD_TYPE_ANGLE = 0
+GS_CMD_TYPE_SPEED = 1
+GS_HARDWARE_LABEL = "fdcan2 · HYOROCEAN 10Nm · Node 0x01~0x04 @500k"
 
 GS_CHANNEL_META = (
     {
@@ -47,28 +52,56 @@ GS_CHANNEL_META = (
     },
 )
 
+# A0 状态字 bit 定义（排除仅状态位时单独标注）
+_FAULT_BITS = (
+    (15, "CAN终端电阻使能", False),
+    (14, "堵转故障", True),
+    (13, "过流故障", True),
+    (12, "漏水故障", True),
+    (11, "停机指令", False),
+    (9, "反向超限", True),
+    (8, "正向超限", True),
+    (7, "未收到指令", False),
+    (6, "指令错误", True),
+    (5, "电机故障", True),
+    (4, "驱动过热", True),
+    (3, "旋变错误2", True),
+    (2, "旋变错误1", True),
+    (1, "HALL错误", True),
+    (0, "过欠压", True),
+)
+
 
 def _decode_fault_labels(fault: int) -> List[str]:
     fault_u = int(fault) & 0xFFFF
     if fault_u == 0:
         return ["无故障"]
-    return [f"故障码 0x{fault_u:04X}（A0 应答 data[4:5]，详见 HYOROCEAN 10Nm 手册）"]
+
+    labels: List[str] = []
+    for bit, name, is_alarm in _FAULT_BITS:
+        if (fault_u >> bit) & 0x1:
+            labels.append(f"{'报警' if is_alarm else '状态'}:{name}")
+
+    if not labels:
+        labels.append(f"未定义位 0x{fault_u:04X}")
+    return labels
 
 
-def _decode_step_label(step: int) -> str:
-    if step == 0:
-        return "0 预留（当前未使用）"
-    return f"{step} 预留字段非零"
+def _decode_speed_label(speed_dps: float) -> str:
+    return f"{float(speed_dps):.0f} °/s"
 
 
 def _build_channel_snapshot(
     index: int,
     angle_deg: float,
-    step: int,
+    forward_speed: float,
+    reverse_speed: float,
     res: int,
+    online: bool,
 ) -> Dict[str, Any]:
     meta = GS_CHANNEL_META[index]
     fault = int(res)
+    alarm_mask = 0x76FF
     return {
         "index": index,
         "label": f"舵机 {index}",
@@ -76,13 +109,17 @@ def _build_channel_snapshot(
         "can_node": meta["can_node"],
         "can_tx_id": meta["can_tx_id"],
         "can_rx_id": meta["can_rx_id"],
+        "online": bool(online),
+        "online_label": "在线" if online else "离线",
         "angle_deg": float(angle_deg),
-        "step": int(step),
-        "step_label": _decode_step_label(int(step)),
+        "forward_speed_feedback": float(forward_speed),
+        "reverse_speed_feedback": float(reverse_speed),
+        "forward_speed_label": _decode_speed_label(forward_speed),
+        "reverse_speed_label": _decode_speed_label(reverse_speed),
         "res": fault,
         "res_hex": f"0x{fault & 0xFFFF:04X}",
-        "res_ok": fault == 0,
-        "res_labels": _decode_fault_labels(fault),
+        "res_ok": (fault & alarm_mask) == 0,
+        "res_labels": _decode_fault_labels(fault) if online else ["未接入"],
     }
 
 
@@ -117,8 +154,10 @@ class GsModule(WebModule):
             _build_channel_snapshot(
                 i,
                 msg.angle_deg[i],
-                msg.step[i],
+                msg.forward_speed_feedback[i],
+                msg.reverse_speed_feedback[i],
                 msg.res[i],
+                int(msg.step[i]) != 0,
             )
             for i in range(GS_CHANNEL_COUNT)
         ]
@@ -129,14 +168,19 @@ class GsModule(WebModule):
             "mavlink_status_msg": "GS_STATUS (id=3, 20Hz)",
             "mavlink_cmd_msg": "GS_CMD (id=15, 单次下发)",
             "mcn_topic": "gs_servo",
-            "hardware": "fdcan1 · HYOROCEAN 10Nm · Node 0x01~0x04 @125k",
+            "hardware": GS_HARDWARE_LABEL,
             "timestamp_ms": int(msg.timestamp_ms),
             "timestamp_label": "MCU rt_tick_get_millisecond()，状态帧时间戳",
             "angle_deg": [ch["angle_deg"] for ch in channels],
-            "step": [ch["step"] for ch in channels],
+            "forward_speed_feedback": [ch["forward_speed_feedback"] for ch in channels],
+            "reverse_speed_feedback": [ch["reverse_speed_feedback"] for ch in channels],
+            "online": [ch["online"] for ch in channels],
+            "online_count": sum(1 for ch in channels if ch["online"]),
+            "channel_count": GS_CHANNEL_COUNT,
             "res": [ch["res"] for ch in channels],
             "channels": channels,
             "mcu_angle_limit_deg": [MCU_ANGLE_MIN_DEG, MCU_ANGLE_MAX_DEG],
+            "mcu_speed_limit_dps": [MCU_SPEED_MIN_DPS, MCU_SPEED_MAX_DPS],
             "stamp_sec": float(msg.header.stamp.sec),
             "stamp_nanosec": int(msg.header.stamp.nanosec),
             "frame_id": str(msg.header.frame_id),
@@ -158,8 +202,9 @@ class GsModule(WebModule):
                     "cmd_tx_count": self.cmd_tx_count_,
                     "status_topic": GS_STATUS_TOPIC,
                     "cmd_topic": GS_CMD_TOPIC,
-                    "hardware": "fdcan1 · HYOROCEAN 10Nm · Node 0x01~0x04 @125k",
+                    "hardware": GS_HARDWARE_LABEL,
                     "mcu_angle_limit_deg": [MCU_ANGLE_MIN_DEG, MCU_ANGLE_MAX_DEG],
+                    "mcu_speed_limit_dps": [MCU_SPEED_MIN_DPS, MCU_SPEED_MAX_DPS],
                 }
             data = dict(self.latest_)
             data["connected"] = True
@@ -174,24 +219,45 @@ class GsModule(WebModule):
                 return False
             return (time.monotonic() - self.last_rx_mono_) <= stale_sec
 
-    def handle_post(self, action: str, body: Dict[str, Any]) -> Tuple[int, Dict[str, Any]]:
+    def _handle_cmd(self, body: Dict[str, Any]) -> Tuple[int, Dict[str, Any]]:
         if self.cmd_pub_ is None:
-            return 503, {"ok": False, "error": "gs publisher not ready"}
+            return 503, {"ok": False, "error": "gs cmd publisher not ready"}
 
-        if action != "cmd":
-            return super().handle_post(action, body)
-
-        if "index" not in body or "angle_deg" not in body:
-            return 400, {"ok": False, "error": "need index (0..3) and angle_deg"}
+        if "index" not in body:
+            return 400, {"ok": False, "error": "need index (0..3)"}
 
         index = int(body["index"])
         if index < 0 or index >= GS_CHANNEL_COUNT:
             return 400, {"ok": False, "error": "index out of range (0..3)"}
 
-        angle_deg = float(body["angle_deg"])
+        cmd_type = int(body.get("cmd_type", GS_CMD_TYPE_ANGLE))
         msg = GsCmd()
         msg.index = index
-        msg.angle_deg = angle_deg
+        msg.cmd_type = cmd_type
+
+        if cmd_type == GS_CMD_TYPE_ANGLE:
+            if "angle_deg" not in body:
+                return 400, {"ok": False, "error": "need angle_deg"}
+            angle_deg = float(body["angle_deg"])
+            msg.angle_deg = angle_deg
+            note = (
+                f"已发布 {GS_CMD_TOPIC}，OBC 透传 GS_CMD 角度；"
+                f"MCU 限幅 [{MCU_ANGLE_MIN_DEG}, {MCU_ANGLE_MAX_DEG}] deg"
+            )
+        elif cmd_type == GS_CMD_TYPE_SPEED:
+            if ("forward_speed" not in body) or ("reverse_speed" not in body):
+                return 400, {"ok": False, "error": "need forward_speed and reverse_speed"}
+            forward_speed = float(body["forward_speed"])
+            reverse_speed = float(body["reverse_speed"])
+            msg.forward_speed = forward_speed
+            msg.reverse_speed = reverse_speed
+            note = (
+                f"已发布 {GS_CMD_TOPIC}，OBC 透传 GS_CMD 转速；"
+                f"MCU 范围 [{MCU_SPEED_MIN_DPS:.0f}, {MCU_SPEED_MAX_DPS:.0f}] deg/s"
+            )
+        else:
+            return 400, {"ok": False, "error": "cmd_type must be 0=angle or 1=speed"}
+
         self.cmd_pub_.publish(msg)
 
         with self.lock_:
@@ -201,10 +267,20 @@ class GsModule(WebModule):
         return 200, {
             "ok": True,
             "index": index,
-            "angle_deg": angle_deg,
+            "cmd_type": cmd_type,
+            "angle_deg": float(msg.angle_deg),
+            "forward_speed": float(msg.forward_speed),
+            "reverse_speed": float(msg.reverse_speed),
             "cmd_tx_count": cmd_tx_count,
-            "note": (
-                f"已发布 {GS_CMD_TOPIC}，OBC 网关透传 MAVLink GS_CMD；"
-                f"MCU 限幅 [{MCU_ANGLE_MIN_DEG}, {MCU_ANGLE_MAX_DEG}] deg"
-            ),
+            "note": note,
         }
+
+    def handle_post(self, action: str, body: Dict[str, Any]) -> Tuple[int, Dict[str, Any]]:
+        if action == "cmd":
+            return self._handle_cmd(body)
+        if action == "cfg":
+            return 404, {
+                "ok": False,
+                "error": "限位/零点/ID/波特率等产线配置走 MCU API，网页不提供",
+            }
+        return super().handle_post(action, body)

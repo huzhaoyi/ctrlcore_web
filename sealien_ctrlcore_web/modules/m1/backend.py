@@ -9,7 +9,7 @@ from collections import deque
 from typing import Any, Deque, Dict, List, Optional, Tuple
 
 from rclpy.node import Node
-from rclpy.qos import qos_profile_sensor_data
+from rclpy.qos import QoSHistoryPolicy, QoSProfile, QoSReliabilityPolicy
 
 from sealien_ctrlpilot_msgmanagement.msg import (
     M1CallCmd,
@@ -29,7 +29,14 @@ INCOMING_TOPIC = "/m1/incoming"
 UPLINK_TOPIC = "/m1/uplink"
 CALL_CMD_TOPIC = "/m1/call_cmd"
 LINK_STATE_TOPIC = "/m1/link_state"
-M1_HARDWARE = "uart5 · M1 · 115200 8N1 · MAVLink M1_STATUS + SERIAL_CONTROL (dev=120)"
+M1_HARDWARE = "uart3 · M1 · 115200 8N1 · MAVLink M1_STATUS + SERIAL_CONTROL (dev=120)"
+DEPLOYMENT_HINT = (
+    "AUV：MCU(uart3)↔M1 → MAVLink → OBC ROS /m1/*；"
+    "岸端：SatM1↔M1 → 同名 ROS /m1/*。话题接口一致。"
+)
+# 面板双层在线判定（与 web_node poll_stale_sec 同量级；M1_STATUS~2Hz）
+MODULE_ONLINE_STALE_SEC = 2.5
+ROS_LINK_ONLINE_STALE_SEC = 2.5
 
 NET_STATE_NAMES = {
     0: "NONE",
@@ -56,6 +63,14 @@ LINK_STATE_NAMES = {
 }
 
 HB_AGE_NEVER = 0xFFFFFFFF
+
+# 与 mavlink_bridge create_publisher(..., 10) 对齐：RELIABLE + depth 10
+# （原先 BEST_EFFORT 在部分 DDS 下与 RELIABLE 发布端不匹配，导致 status_rx_count 一直为 0）
+M1_STATUS_QOS = QoSProfile(
+    reliability=QoSReliabilityPolicy.RELIABLE,
+    history=QoSHistoryPolicy.KEEP_LAST,
+    depth=10,
+)
 
 
 def _bytes_to_hex(data: List[int]) -> str:
@@ -134,25 +149,25 @@ class M1Module(WebModule):
             M1Status,
             STATUS_TOPIC,
             self._on_status,
-            qos_profile_sensor_data,
+            M1_STATUS_QOS,
         )
         node.create_subscription(
             M1Downlink,
             DOWNLINK_TOPIC,
             self._on_downlink,
-            qos_profile_sensor_data,
+            M1_STATUS_QOS,
         )
         node.create_subscription(
             M1Incoming,
             INCOMING_TOPIC,
             self._on_incoming,
-            qos_profile_sensor_data,
+            M1_STATUS_QOS,
         )
         node.create_subscription(
             M1LinkState,
             LINK_STATE_TOPIC,
             self._on_link_state,
-            qos_profile_sensor_data,
+            M1_STATUS_QOS,
         )
 
     def _on_link_state(self, msg: M1LinkState) -> None:
@@ -236,15 +251,25 @@ class M1Module(WebModule):
             link_state = dict(self.latest_link_state_) if self.latest_link_state_ is not None else None
             history = [dict(item) for item in self.downlink_history_]
             incoming_history = [dict(item) for item in self.incoming_history_]
+            now = time.monotonic()
             status_age = None
             down_age = None
             link_age = None
             if self.last_status_mono_ is not None:
-                status_age = round(time.monotonic() - self.last_status_mono_, 3)
+                status_age = round(now - self.last_status_mono_, 3)
             if self.last_downlink_mono_ is not None:
-                down_age = round(time.monotonic() - self.last_downlink_mono_, 3)
+                down_age = round(now - self.last_downlink_mono_, 3)
             if self.last_link_state_mono_ is not None:
-                link_age = round(time.monotonic() - self.last_link_state_mono_, 3)
+                link_age = round(now - self.last_link_state_mono_, 3)
+
+            module_online = (
+                self.last_status_mono_ is not None
+                and (now - self.last_status_mono_) <= MODULE_ONLINE_STALE_SEC
+            )
+            ros_link_online = (
+                self.last_link_state_mono_ is not None
+                and (now - self.last_link_state_mono_) <= ROS_LINK_ONLINE_STALE_SEC
+            )
 
             return {
                 "status_topic": STATUS_TOPIC,
@@ -254,8 +279,15 @@ class M1Module(WebModule):
                 "call_cmd_topic": CALL_CMD_TOPIC,
                 "link_state_topic": LINK_STATE_TOPIC,
                 "hardware": M1_HARDWARE,
+                "deployment_hint": DEPLOYMENT_HINT,
                 "mcn_topic": "sensor_m1",
                 "auto_answer": True,
+                "module_online": module_online,
+                "module_online_text": "在线" if module_online else "离线",
+                "ros_link_online": ros_link_online,
+                "ros_link_online_text": (
+                    "在线" if ros_link_online else ("未启动/无心跳" if link_state is None else "离线")
+                ),
                 "status": status,
                 "downlink": downlink,
                 "incoming": incoming,
@@ -273,15 +305,12 @@ class M1Module(WebModule):
             }
 
     def is_alive(self, now_sec: float, stale_sec: float) -> bool:
+        """侧栏只跟模块层：/m1/status 新鲜即在线（不要求 sat_task）。"""
         _ = now_sec
         with self.lock_:
-            if self.last_status_mono_ is None and self.last_downlink_mono_ is None:
+            if self.last_status_mono_ is None:
                 return False
-            last_mono = max(
-                self.last_status_mono_ or 0.0,
-                self.last_downlink_mono_ or 0.0,
-            )
-            return (time.monotonic() - last_mono) <= stale_sec
+            return (time.monotonic() - self.last_status_mono_) <= stale_sec
 
     def handle_post(self, action: str, body: Dict[str, Any]) -> Tuple[int, Dict[str, Any]]:
         if action == "uplink":

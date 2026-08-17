@@ -4,13 +4,14 @@ import {
   markAllModulesOffline,
 } from "./module_health.mjs";
 
-const POLL_MS = 500;
+const POLL_MS = 100;
 
 export class AppShell {
   constructor() {
     this.modules = new Map();
     this.activeId = null;
     this.pollTimer = null;
+    this.pollBusy = false;
     this.lastSnapshot = null;
     this.navEl = document.getElementById("module-nav");
     this.panelRoot = document.getElementById("panel-root");
@@ -100,6 +101,10 @@ export class AppShell {
   }
 
   async _poll() {
+    if (this.pollBusy) {
+      return;
+    }
+    this.pollBusy = true;
     try {
       const snapshot = await fetchSnapshot();
       this.lastSnapshot = snapshot;
@@ -119,6 +124,8 @@ export class AppShell {
         `无法访问 /api/snapshot：${detail}。请确认通过 http://本机IP:8081 打开，且 ctrlcore_web_node 已启动。`;
       this.linkBadge.className = "badge offline";
       console.error(err);
+    } finally {
+      this.pollBusy = false;
     }
   }
 

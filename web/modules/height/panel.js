@@ -2,16 +2,26 @@ const HEIGHT_INVALID = 65535;
 
 function fmtDistCm(cm) {
   const value = Number(cm);
-  if (!Number.isFinite(value) || value <= 0 || value >= HEIGHT_INVALID) {
+  if (!Number.isFinite(value)) {
     return "—";
+  }
+  /* MCU：无效/未入水填 65535（对应 NMEA FF） */
+  if (value >= HEIGHT_INVALID) {
+    return "FF (65535 · 无效/未入水)";
+  }
+  if (value <= 0) {
+    return "0 cm (无回波)";
   }
   return `${value} cm (${(value / 100.0).toFixed(3)} m)`;
 }
 
 function fmtStren(stren) {
   const value = Number(stren);
-  if (!Number.isFinite(value) || value >= HEIGHT_INVALID) {
+  if (!Number.isFinite(value)) {
     return "—";
+  }
+  if (value >= HEIGHT_INVALID) {
+    return "FF";
   }
   return String(value);
 }
@@ -53,13 +63,13 @@ export default {
           <div class="card"><div class="label">ROS 话题</div><div id="height-topic" class="value mono-block">/SonarAltimeterStatus</div></div>
         </div>
         <div class="card-grid">
-          <div class="card wide"><div class="label">硬件 / 总线</div><div id="height-hw" class="value mono-block">uart3 RS485 · GCRY-S400-FL</div></div>
+          <div class="card wide"><div class="label">硬件 / 总线</div><div id="height-hw" class="value mono-block">uart5 RS485 · GCRY-S400-FL</div></div>
         </div>
         <div class="hint">
-          MCU <code>uart3</code> RS485 GCRY-S400-FL（NMEA <code>$SDDBT</code> @9600，硬件 4Hz）
+          MCU <code>uart5</code> RS485 GCRY-S400-FL（NMEA <code>$SDDBT</code> @9600，硬件 4Hz）
           → MCN <code>sensor_gcry_altimeter</code> → MAVLink <code>HEIGHT_STATUS</code> (msgid 6, 4Hz)
           → ROS <code>/SonarAltimeterStatus</code>。
-          字段与 <code>mavlink_height_status_t</code> 一致；距离单位 cm，无效值 65535。
+          距离单位 cm；NMEA <code>FF</code> 在链路上为 <code>65535</code>，页面显示为 FF。
         </div>
       </section>
 
@@ -89,7 +99,7 @@ export default {
             </tbody>
           </table>
         </div>
-        <p class="hint">GCRY 简易声呐仅使用通道 [0] 的 near_dist；其余通道应为 65535。</p>
+        <p class="hint">GCRY 简易声呐仅使用通道 [0] 的 near_dist；FF/未入水显示为 FF，其余通道亦为 FF。</p>
       </section>
     `;
   },
@@ -108,7 +118,7 @@ export default {
       data.age_sec != null ? Number(data.age_sec).toFixed(3) : "—",
     );
     setCell("height-topic", data.status_topic ?? "/SonarAltimeterStatus");
-    setCell("height-hw", data.hardware ?? "uart3 RS485 · GCRY-S400-FL · NMEA $SDDBT @9600");
+    setCell("height-hw", data.hardware ?? "uart5 RS485 · GCRY-S400-FL · NMEA $SDDBT @9600");
     setCell(
       "height-timestamp-ms",
       connected && data.timestamp_ms != null ? String(data.timestamp_ms) : "—",

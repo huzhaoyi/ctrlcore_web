@@ -14,7 +14,7 @@ from sealien_ctrlcore_web.core.base_module import WebModule
 
 HEIGHT_STATUS_CHANNEL_COUNT = 5
 HEIGHT_STATUS_TOPIC = "/SonarAltimeterStatus"
-HEIGHT_HARDWARE = "uart3 RS485 · GCRY-S400-FL · NMEA $SDDBT @9600 · 4Hz"
+HEIGHT_HARDWARE = "uart5 RS485 · GCRY-S400-FL · NMEA $SDDBT @9600 · 4Hz"
 
 
 class HeightModule(WebModule):

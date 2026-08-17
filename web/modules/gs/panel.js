@@ -1,6 +1,8 @@
 import { postModule } from "../../core/api.js";
 
 const GS_CHANNEL_COUNT = 4;
+const GS_CMD_TYPE_ANGLE = 0;
+const GS_CMD_TYPE_SPEED = 1;
 
 function setText(id, text) {
   const el = document.getElementById(id);
@@ -48,8 +50,10 @@ function channelRowsHtml() {
       <tr>
         <td class="mono">[${index}]</td>
         <td id="gs-ch-${index}-meta" class="hint">—</td>
+        <td id="gs-ch-${index}-online">—</td>
         <td id="gs-ch-${index}-angle" class="mono">—</td>
-        <td id="gs-ch-${index}-step" class="mono">—</td>
+        <td id="gs-ch-${index}-fwd" class="mono">—</td>
+        <td id="gs-ch-${index}-rev" class="mono">—</td>
         <td id="gs-ch-${index}-res" class="mono">—</td>
         <td id="gs-ch-${index}-res-label" class="hint">—</td>
       </tr>
@@ -66,6 +70,27 @@ function channelOptionsHtml() {
   return options.join("");
 }
 
+function numInput(id, value, step) {
+  return `<input id="${id}" type="number" step="${step}" value="${value}"
+    style="width:100%;padding:8px;border-radius:8px;border:1px solid var(--border);background:#0f1419;color:var(--text)">`;
+}
+
+function setCmdTypeView(cmdType) {
+  const angleCard = document.getElementById("gs-cmd-angle-card");
+  const fwdCard = document.getElementById("gs-cmd-fwd-card");
+  const revCard = document.getElementById("gs-cmd-rev-card");
+  const isAngle = Number(cmdType) === GS_CMD_TYPE_ANGLE;
+  if (angleCard) {
+    angleCard.style.display = isAngle ? "" : "none";
+  }
+  if (fwdCard) {
+    fwdCard.style.display = isAngle ? "none" : "";
+  }
+  if (revCard) {
+    revCard.style.display = isAngle ? "none" : "";
+  }
+}
+
 export default {
   id: "gs",
   title: "10Nm 舵机",
@@ -75,22 +100,24 @@ export default {
       <section class="panel">
         <h2>链路状态</h2>
         <div class="card-grid">
-          <div class="card"><div class="label">连接</div><div id="gs-connected" class="value">--</div></div>
+          <div class="card"><div class="label">链路</div><div id="gs-connected" class="value">--</div></div>
+          <div class="card"><div class="label">舵机在线</div><div id="gs-online-count" class="value">--</div></div>
           <div class="card"><div class="label">状态帧计数</div><div id="gs-rx-count" class="value">--</div></div>
           <div class="card"><div class="label">距上次更新 (s)</div><div id="gs-age" class="value">--</div></div>
           <div class="card"><div class="label">状态话题</div><div id="gs-status-topic" class="value mono-block">/GsStatus</div></div>
         </div>
         <div class="card-grid">
-          <div class="card wide"><div class="label">硬件 / 总线</div><div id="gs-link-hw" class="value mono-block">fdcan1 · HYOROCEAN 10Nm</div></div>
+          <div class="card wide"><div class="label">硬件 / 总线</div><div id="gs-link-hw" class="value mono-block">fdcan2 · HYOROCEAN 10Nm</div></div>
         </div>
         <p class="hint">
-          状态链：控制板 <code>fdcan1</code> · HYOROCEAN 10Nm 舵机（Node 0x01~0x04 @125k）
-          → MCN <code>gs_servo</code> → MAVLink <code>GS_STATUS (msgid 3, 20Hz)</code>
+          状态链：控制板 <code>fdcan2</code> · HYOROCEAN 10Nm（Node 0x01~0x04 @500k）
+          → MCN <code>gs_servo</code> → MAVLink <code>GS_STATUS</code>
           → OBC bridge → ROS <code>/GsStatus</code>。
         </p>
         <p class="hint">
-          命令链：Web → ROS <code>/obc/gs_cmd</code> → MAVLink <code>GS_CMD (msgid 15)</code>
-          → MCU <code>servo_N_out</code>（CAN C1/A0）。OBC 网关透传；角度限幅 ±45° 在 MCU。
+          运行时命令：<code>/obc/gs_cmd</code> → GS_CMD（0=角度 / 1=正反转速）。
+          四路可独立在线；未接入的路显示离线。
+          零点 / ID / 波特率 / 限位等产线配置走 MCU，网页不提供。
         </p>
       </section>
 
@@ -100,12 +127,10 @@ export default {
           <div class="card">
             <div class="label">timestamp_ms</div>
             <div id="gs-timestamp-ms" class="value mono-block">—</div>
-            <p class="hint">MCU 毫秒 tick，与 MCN <code>gs_servo.state.timestamp_ms</code> 一致</p>
           </div>
           <div class="card">
             <div class="label">ROS header.stamp</div>
             <div id="gs-ros-stamp" class="value mono-block">—</div>
-            <p class="hint">OBC bridge 收到 MAVLink 后打 ROS 时间戳</p>
           </div>
           <div class="card">
             <div class="label">frame_id</div>
@@ -113,13 +138,15 @@ export default {
           </div>
           <div class="card">
             <div class="label">硬件 / 总线</div>
-            <div id="gs-hardware" class="value mono-block">fdcan1 · 10Nm</div>
-            <p class="hint">4 路 HAL：<code>servo_0_out</code> … <code>servo_3_out</code></p>
+            <div id="gs-hardware" class="value mono-block">fdcan2 · 10Nm</div>
           </div>
           <div class="card">
             <div class="label">MCU 角度限幅 (deg)</div>
             <div id="gs-mcu-limit" class="value mono-block">—</div>
-            <p class="hint">Web/OBC 不限幅；超范围由 MCU <code>servo_10nm_clamp_deg</code> 处理</p>
+          </div>
+          <div class="card">
+            <div class="label">MCU 转速范围 (°/s)</div>
+            <div id="gs-mcu-speed-limit" class="value mono-block">—</div>
           </div>
           <div class="card">
             <div class="label">命令话题</div>
@@ -136,8 +163,10 @@ export default {
               <tr>
                 <th>index</th>
                 <th>硬件 / CAN</th>
+                <th>在线</th>
                 <th>angle_deg (°)</th>
-                <th>step</th>
+                <th>fwd (°/s)</th>
+                <th>rev (°/s)</th>
                 <th>res</th>
                 <th>故障解析</th>
               </tr>
@@ -148,8 +177,10 @@ export default {
           </table>
         </div>
         <p class="hint">
-          <strong>angle_deg</strong>：A0 查询当前角度（deg）。<strong>step</strong>：MAVLink 预留，当前填 0。
-          <strong>res</strong>：A0 应答故障字 data[4:5]，0x0000 表示无故障。
+          <strong>在线</strong>：该路有应答。未接的路保持离线，不影响其它路上报。
+          <strong>angle_deg</strong>：当前角度。
+          <strong>fwd / rev</strong>：正反转速反馈。
+          离线时角度和故障不显示实测值。
         </p>
       </section>
 
@@ -158,23 +189,34 @@ export default {
         <div class="card-grid">
           <div class="card"><div class="label">CMD 下发计数</div><div id="gs-cmd-count" class="value">--</div></div>
         </div>
-        <p class="hint">
-          字段：<code>index</code> 0~3 对应四路舵机；<code>angle_deg</code> 目标角度（deg）。
-          MCU 收到后写 <code>target_deg</code> 并经 CAN C1(0xC100) 下发；SIM 模式下角度立即跟随。
-        </p>
         <div class="card-grid">
           <div class="card">
             <div class="label">index</div>
             <select id="gs-index" style="width:100%;padding:8px;border-radius:8px;border:1px solid var(--border);background:#0f1419;color:var(--text)">
               ${channelOptionsHtml()}
             </select>
-            <p class="hint">舵机通道，与上表 index 一致</p>
           </div>
           <div class="card">
+            <div class="label">cmd_type</div>
+            <select id="gs-cmd-type" style="width:100%;padding:8px;border-radius:8px;border:1px solid var(--border);background:#0f1419;color:var(--text)">
+              <option value="${GS_CMD_TYPE_ANGLE}">0 角度</option>
+              <option value="${GS_CMD_TYPE_SPEED}">1 转速</option>
+            </select>
+          </div>
+          <div class="card" id="gs-cmd-angle-card">
             <div class="label">angle_deg (°)</div>
-            <input id="gs-angle-input" type="number" step="0.1" value="0.0"
-              style="width:100%;padding:8px;border-radius:8px;border:1px solid var(--border);background:#0f1419;color:var(--text)">
-            <p class="hint">建议 ±45（MCU 机械限幅）；可输入更大值以验证 MCU 钳位</p>
+            ${numInput("gs-angle-input", "0.0", "0.1")}
+            <p class="hint">建议 ±45；超范围由 MCU 钳位</p>
+          </div>
+          <div class="card" id="gs-cmd-fwd-card" style="display:none">
+            <div class="label">forward_speed (°/s)</div>
+            ${numInput("gs-fwd-input", "20", "1")}
+            <p class="hint">正转 CB01，MCU 范围 6~45</p>
+          </div>
+          <div class="card" id="gs-cmd-rev-card" style="display:none">
+            <div class="label">reverse_speed (°/s)</div>
+            ${numInput("gs-rev-input", "20", "1")}
+            <p class="hint">反转 CB02，MCU 范围 6~45</p>
           </div>
         </div>
         <div class="control-row" style="margin-top:12px">
@@ -182,38 +224,60 @@ export default {
         </div>
         <div id="gs-cmd-result" class="hint">POST /api/modules/gs/cmd → /obc/gs_cmd</div>
       </section>
-
-      <section class="panel">
-        <h2>协议字段对照</h2>
-        <p class="mono-block">
-          GS_STATUS (MCU→OBC, id=3): timestamp_ms, angle[4], step[4], res[4]<br>
-          GS_CMD (OBC→MCU, id=15): index (uint8), angle (float32 deg)<br>
-          CAN @ fdcan1 125k, Node 0x01~0x04, TX=0x300+N RX=0x280+N, C1/A0/C2 PDO2
-        </p>
-      </section>
     `;
+
+    this._onCmdTypeChange = () => {
+      const typeEl = document.getElementById("gs-cmd-type");
+      setCmdTypeView(typeEl ? typeEl.value : GS_CMD_TYPE_ANGLE);
+    };
 
     this._onGsSend = async () => {
       const index = Number(document.getElementById("gs-index").value);
-      const angleInput = document.getElementById("gs-angle-input");
-      const angle = Number(angleInput.value);
-      if (!Number.isFinite(angle)) {
-        document.getElementById("gs-cmd-result").textContent = "angle_deg 无效";
-        return;
-      }
-      angleInput.value = angle.toFixed(1);
+      const cmdType = Number(document.getElementById("gs-cmd-type").value);
       const resultEl = document.getElementById("gs-cmd-result");
+      const payload = {
+        index,
+        cmd_type: cmdType,
+      };
+
+      if (cmdType === GS_CMD_TYPE_ANGLE) {
+        const angleInput = document.getElementById("gs-angle-input");
+        const angle = Number(angleInput.value);
+        if (!Number.isFinite(angle)) {
+          resultEl.textContent = "angle_deg 无效";
+          return;
+        }
+        angleInput.value = angle.toFixed(1);
+        payload.angle_deg = angle;
+      } else {
+        const fwdInput = document.getElementById("gs-fwd-input");
+        const revInput = document.getElementById("gs-rev-input");
+        const forwardSpeed = Number(fwdInput.value);
+        const reverseSpeed = Number(revInput.value);
+        if (!Number.isFinite(forwardSpeed) || !Number.isFinite(reverseSpeed)) {
+          resultEl.textContent = "forward_speed / reverse_speed 无效";
+          return;
+        }
+        payload.forward_speed = forwardSpeed;
+        payload.reverse_speed = reverseSpeed;
+      }
+
       try {
-        const { status, data } = await postModule("gs", "cmd", {
-          index,
-          angle_deg: angle,
-        });
+        const { status, data } = await postModule("gs", "cmd", payload);
         if (data.ok) {
-          resultEl.textContent = [
-            `已下发 [${data.index}] angle=${fmt(data.angle_deg, 1)}°`,
-            `cmd 累计=${data.cmd_tx_count}`,
-            data.note || "",
-          ].join(" · ");
+          if (Number(data.cmd_type) === GS_CMD_TYPE_SPEED) {
+            resultEl.textContent = [
+              `已下发 [${data.index}] 转速 fwd=${fmt(data.forward_speed, 0)} rev=${fmt(data.reverse_speed, 0)} °/s`,
+              `cmd 累计=${data.cmd_tx_count}`,
+              data.note || "",
+            ].join(" · ");
+          } else {
+            resultEl.textContent = [
+              `已下发 [${data.index}] angle=${fmt(data.angle_deg, 1)}°`,
+              `cmd 累计=${data.cmd_tx_count}`,
+              data.note || "",
+            ].join(" · ");
+          }
         } else {
           resultEl.textContent = `失败 (${status}): ${data.error || "unknown"}`;
         }
@@ -222,7 +286,9 @@ export default {
       }
     };
 
+    document.getElementById("gs-cmd-type").addEventListener("change", this._onCmdTypeChange);
     document.getElementById("gs-send").addEventListener("click", this._onGsSend);
+    this._onCmdTypeChange();
   },
 
   update(snapshot) {
@@ -232,7 +298,7 @@ export default {
     }
 
     const connected = Boolean(data.connected);
-    setText("gs-connected", connected ? "在线" : "离线");
+    setText("gs-connected", connected ? "有状态帧" : "无状态帧");
     setText("gs-rx-count", data.rx_count ?? 0);
     setText("gs-cmd-count", data.cmd_tx_count ?? 0);
     setText("gs-age", data.age_sec != null ? Number(data.age_sec).toFixed(3) : "—");
@@ -250,8 +316,16 @@ export default {
       setText("gs-mcu-limit", "±45（MCU 默认）");
     }
 
+    const speedLimit = data.mcu_speed_limit_dps || [];
+    if (speedLimit.length >= 2) {
+      setText("gs-mcu-speed-limit", `[${fmt(speedLimit[0], 0)}, ${fmt(speedLimit[1], 0)}]`);
+    } else {
+      setText("gs-mcu-speed-limit", "[6, 45]");
+    }
+
     if (!connected) {
       setText("gs-timestamp-ms", data.message || "等待 /GsStatus");
+      setText("gs-online-count", `—/${GS_CHANNEL_COUNT}`);
       return;
     }
 
@@ -266,17 +340,37 @@ export default {
     setText("gs-frame-id", data.frame_id ?? "—");
 
     const channels = data.channels || [];
+    const onlineCount = Number.isFinite(Number(data.online_count))
+      ? Number(data.online_count)
+      : channels.filter((ch) => ch && ch.online).length;
+    setText("gs-online-count", `${onlineCount}/${data.channel_count ?? GS_CHANNEL_COUNT}`);
+
     for (let index = 0; index < GS_CHANNEL_COUNT; index += 1) {
       const ch = channels[index];
       if (!ch) {
         continue;
       }
+      const online = Boolean(ch.online);
       setText(
         `gs-ch-${index}-meta`,
         `${ch.hal_name} · Node ${ch.can_node} · TX ${ch.can_tx_id} RX ${ch.can_rx_id}`,
       );
+      setStatusValue(
+        `gs-ch-${index}-online`,
+        online,
+        ch.online_label ?? (online ? "在线" : "离线"),
+      );
+      if (!online) {
+        setText(`gs-ch-${index}-angle`, "—");
+        setText(`gs-ch-${index}-fwd`, "—");
+        setText(`gs-ch-${index}-rev`, "—");
+        setText(`gs-ch-${index}-res`, "—");
+        setStatusValue(`gs-ch-${index}-res-label`, false, "未接入");
+        continue;
+      }
       setText(`gs-ch-${index}-angle`, fmtSigned(ch.angle_deg, 2));
-      setText(`gs-ch-${index}-step`, ch.step_label ?? String(ch.step ?? "—"));
+      setText(`gs-ch-${index}-fwd`, ch.forward_speed_label ?? fmt(ch.forward_speed_feedback, 0));
+      setText(`gs-ch-${index}-rev`, ch.reverse_speed_label ?? fmt(ch.reverse_speed_feedback, 0));
       setText(`gs-ch-${index}-res`, ch.res_hex ?? "—");
       setStatusValue(
         `gs-ch-${index}-res-label`,
@@ -287,6 +381,10 @@ export default {
   },
 
   destroy() {
+    const typeEl = document.getElementById("gs-cmd-type");
+    if (typeEl && this._onCmdTypeChange) {
+      typeEl.removeEventListener("change", this._onCmdTypeChange);
+    }
     const btn = document.getElementById("gs-send");
     if (btn && this._onGsSend) {
       btn.removeEventListener("click", this._onGsSend);

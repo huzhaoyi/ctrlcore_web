@@ -17,6 +17,8 @@ BMS_STATUS_TOPIC = "/BmsStatus"
 BMS_CMD_TOPIC = "/obc/bms_mos_cmd"
 BMS_HARDWARE = "uart6 串口 · 通用 BMS 协议 9600 · 双电池包(0x01/0x02) · BMS_STATUS @4Hz"
 VALID_PACK_IDS = (1, 2)
+# 交替上报约 2Hz/包；超时未刷新则视为该包离线（MCU 失败时不再发该 pack）
+BMS_PACK_STALE_SEC = 2.5
 
 
 class BmsModule(WebModule):
@@ -26,6 +28,7 @@ class BmsModule(WebModule):
         self.cmd_tx_count_ = 0
         self.last_rx_mono_: Optional[float] = None
         self.packs_: Dict[int, Dict[str, Any]] = {}
+        self.pack_rx_mono_: Dict[int, float] = {}
         self.cmd_pub_ = None
 
     @property
@@ -99,12 +102,31 @@ class BmsModule(WebModule):
             "scheme_id": int(msg.scheme_id),
             "timestamp_ms": int(msg.timestamp_ms),
         }
+        now_mono = time.monotonic()
         with self.lock_:
             self.rx_count_ += 1
-            self.last_rx_mono_ = time.monotonic()
-            self.packs_[int(msg.pack_id)] = enrich_bms_pack(pack)
+            self.last_rx_mono_ = now_mono
+            pid = int(msg.pack_id)
+            self.pack_rx_mono_[pid] = now_mono
+            self.packs_[pid] = enrich_bms_pack(pack)
+
+    def _pack_for_snapshot(self, pid: int, now_mono: float) -> Dict[str, Any]:
+        pack = enrich_bms_pack(dict(self.packs_[pid]))
+        last = self.pack_rx_mono_.get(pid)
+        if last is None:
+            pack["comm_ok"] = 0
+            pack["age_sec"] = None
+            return enrich_bms_pack(pack)
+
+        age = now_mono - last
+        pack["age_sec"] = round(age, 3)
+        # MCU 失联后不再发该 pack；网页不得沿用历史 comm_ok=1
+        if age > BMS_PACK_STALE_SEC:
+            pack["comm_ok"] = 0
+        return enrich_bms_pack(pack)
 
     def get_snapshot(self) -> Dict[str, Any]:
+        now_mono = time.monotonic()
         with self.lock_:
             base = {
                 "status_topic": BMS_STATUS_TOPIC,
@@ -123,13 +145,16 @@ class BmsModule(WebModule):
                 base["packs"] = []
                 return base
 
+            # 顶栏「连接」= 任一包近期有帧；单包是否在线看 packs[].comm_ok
             base["connected"] = True
+            if self.last_rx_mono_ is not None:
+                base["age_sec"] = round(now_mono - self.last_rx_mono_, 3)
+                if base["age_sec"] > BMS_PACK_STALE_SEC:
+                    base["connected"] = False
             base["packs"] = [
-                enrich_bms_pack(dict(self.packs_[pid]))
+                self._pack_for_snapshot(pid, now_mono)
                 for pid in sorted(self.packs_.keys())
             ]
-            if self.last_rx_mono_ is not None:
-                base["age_sec"] = round(time.monotonic() - self.last_rx_mono_, 3)
             return base
 
     def is_alive(self, now_sec: float, stale_sec: float) -> bool:
