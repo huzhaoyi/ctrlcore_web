@@ -8,7 +8,6 @@
     { "id": "wire_displacement", "script": "/modules/wire_displacement/panel.js" },
     { "id": "bme280", "script": "/modules/bme280/panel.js" },
     { "id": "gs", "script": "/modules/gs/panel.js" },
-    { "id": "pitch_motor", "script": "/modules/pitch_motor/panel.js" },
     { "id": "plunger_pump", "script": "/modules/plunger_pump/panel.js" },
     { "id": "bms", "script": "/modules/bms/panel.js" },
     { "id": "payload_en", "script": "/modules/payload_en/panel.js" },

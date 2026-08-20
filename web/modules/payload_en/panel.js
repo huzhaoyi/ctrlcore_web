@@ -5,14 +5,16 @@ const VALVE_COUNT = 16;
 const JETTISON_INDEX = 2;
 const SONAR_INDEX_A = 3;
 const SONAR_INDEX_B = 4;
+const DVL_INDEX_A = 5;
+const DVL_INDEX_B = 6;
 const VALVE_LABELS = [
   "GPIO0(阀1高压)",
   "GPIO1(阀2低压)",
   "GPIO2(抛载)",
   "GPIO3(声呐24V·并)",
   "GPIO4(声呐24V·并)",
-  "GPIO5(24V)",
-  "GPIO6(24V)",
+  "GPIO5(DVL 24V·并)",
+  "GPIO6(DVL 24V·并)",
   "GPIO7(24V)",
   "GPIO8(3.3V)",
   "GPIO9(3.3V)",
@@ -29,8 +31,8 @@ const VALVE_GPIO_HINTS = [
   "DEV1 P0 PIN2 (24V · 抛载，拉高即丢，慎重)",
   "DEV1 P0 PIN3 (24V · 声呐并联 A，与 GPIO4 同开同关)",
   "DEV1 P0 PIN4 (24V · 声呐并联 B，与 GPIO3 同开同关)",
-  "DEV1 P0 PIN5 (24V)",
-  "DEV1 P0 PIN6 (24V)",
+  "DEV1 P0 PIN5 (24V · DVL 并联 A，与 GPIO6 同开同关)",
+  "DEV1 P0 PIN6 (24V · DVL 并联 B，与 GPIO5 同开同关)",
   "DEV1 P0 PIN7 (24V)",
   "DEV1 P1 PIN0 (3.3V)",
   "DEV1 P1 PIN1 (3.3V)",
@@ -65,7 +67,9 @@ function buildValveCards(startIndex, endIndex) {
         ? `<div class="hint en-caution">⚠ 开启则 AUV 抛载丢弃，操作请慎重</div>`
         : (index === SONAR_INDEX_A || index === SONAR_INDEX_B)
           ? `<div class="hint">单路约 1A，声呐约 2A：GPIO3+GPIO4 并联，开/关任一即两路一起动</div>`
-          : "";
+          : (index === DVL_INDEX_A || index === DVL_INDEX_B)
+            ? `<div class="hint">单路约 1A：GPIO5+GPIO6 并联供 DVL，开/关任一即两路一起动</div>`
+            : "";
     cards.push(`
       <div class="card en-card${index === JETTISON_INDEX ? " en-card-danger" : ""}" id="en-card-${index}">
         <div class="label">${VALVE_LABELS[index]} · index ${index}</div>
@@ -89,7 +93,7 @@ async function sendCmd(index, value, resultEl) {
     if (data.ok) {
       const paired = Array.isArray(data.paired_index) && data.paired_index.length > 1;
       resultEl.textContent = paired
-        ? `已下发声呐 GPIO3+GPIO4 → ${value === 1 ? "ON" : "OFF"}`
+        ? `已下发 ${data.pair_label || data.label} → ${value === 1 ? "ON" : "OFF"}`
         : `已下发 ${data.label} → ${value === 1 ? "ON" : "OFF"}`;
     } else {
       resultEl.textContent = `失败：${data.error || "unknown"}`;
@@ -145,7 +149,7 @@ export default {
         <div class="control-row" style="margin-top:14px">
           <button id="en-all-off" type="button">全部关闭</button>
         </div>
-        <div id="en-cmd-result" class="hint">GPIO 为执行器操作，请谨慎；极性为高有效（1=开）。GPIO2 抛载：开启即丢，务必确认。GPIO3+GPIO4 声呐并联同开同关。</div>
+        <div id="en-cmd-result" class="hint">GPIO 为执行器操作，请谨慎；极性为高有效（1=开）。GPIO2 抛载：开启即丢，务必确认。GPIO3+GPIO4 声呐、GPIO5+GPIO6 DVL 并联同开同关。</div>
       </section>
     `;
 

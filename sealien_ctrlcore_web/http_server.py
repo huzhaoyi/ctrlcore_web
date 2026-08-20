@@ -58,8 +58,22 @@ class CtrlCoreHttpServer:
         safe_join = self._safe_join
 
         class Handler(BaseHTTPRequestHandler):
+            _CLIENT_GONE = (BrokenPipeError, ConnectionResetError, ConnectionAbortedError)
+
             def log_message(self, fmt: str, *args: Any) -> None:
                 logger.debug((fmt % args) if args else fmt)
+
+            def handle_one_request(self) -> None:
+                try:
+                    super().handle_one_request()
+                except self._CLIENT_GONE:
+                    logger.debug("client disconnected: %s", self.client_address)
+
+            def _write_body(self, body: bytes) -> None:
+                try:
+                    self.wfile.write(body)
+                except self._CLIENT_GONE:
+                    logger.debug("client disconnected while sending: %s", self.client_address)
 
             def _send_json(self, code: int, payload: Dict[str, Any]) -> None:
                 body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
@@ -67,7 +81,7 @@ class CtrlCoreHttpServer:
                 self.send_header("Content-Type", "application/json; charset=utf-8")
                 self.send_header("Content-Length", str(len(body)))
                 self.end_headers()
-                self.wfile.write(body)
+                self._write_body(body)
 
             def _send_file(self, path: str) -> None:
                 if not os.path.isfile(path):
@@ -90,7 +104,7 @@ class CtrlCoreHttpServer:
                 self.send_header("Content-Type", content_type)
                 self.send_header("Content-Length", str(len(data)))
                 self.end_headers()
-                self.wfile.write(data)
+                self._write_body(data)
 
             def _read_json_body(self) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
                 length = int(self.headers.get("Content-Length", "0"))

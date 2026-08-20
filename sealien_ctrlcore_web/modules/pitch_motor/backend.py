@@ -18,6 +18,16 @@ PITCH_CMD_TOPIC = "/obc/pitch_cmd"
 MCU_RPM_MIN = 150
 MCU_RPM_MAX = 3000
 
+PITCH_ZERO_MM = 45.0
+PITCH_TRAVEL_MAX_MM = 125.0
+PITCH_S_MAX_MM = PITCH_TRAVEL_MAX_MM - PITCH_ZERO_MM
+PITCH_MM_SCALE = 10.0
+
+RUN_CMD_STOP = 0
+RUN_CMD_FWD = 1
+RUN_CMD_REV = 2
+RUN_CMD_DISPLACE_ZERO = 3
+
 FAULT_LABELS = {
     0: "正常",
     1: "IPM 过热",
@@ -31,10 +41,10 @@ FAULT_LABELS = {
 }
 
 RUN_LABELS = {
-    0: "自由停止 (0x1003=0)",
-    1: "正转 (0x1003=1)",
-    2: "反转 (0x1003=2)",
-    3: "刹车停 (0x1003=3)",
+    0: "停止",
+    1: "正转",
+    2: "反转",
+    3: "相对零位位移",
 }
 
 
@@ -85,6 +95,9 @@ class PitchMotorModule(WebModule):
             "bus_current_a": round(float(msg.bus_current_x100) * 0.01, 2),
             "cpu_temp_c": int(msg.cpu_temp_c),
             "mcu_rpm_limit": [MCU_RPM_MIN, MCU_RPM_MAX],
+            "pitch_zero_mm": PITCH_ZERO_MM,
+            "pitch_travel_max_mm": PITCH_TRAVEL_MAX_MM,
+            "pitch_s_max_mm": PITCH_S_MAX_MM,
             "stamp_sec": float(msg.header.stamp.sec),
             "stamp_nanosec": int(msg.header.stamp.nanosec),
             "frame_id": str(msg.header.frame_id),
@@ -108,6 +121,9 @@ class PitchMotorModule(WebModule):
                     "cmd_topic": PITCH_CMD_TOPIC,
                     "hardware": "uart4 RS485 · BLD005-LR",
                     "mcu_rpm_limit": [MCU_RPM_MIN, MCU_RPM_MAX],
+                    "pitch_zero_mm": PITCH_ZERO_MM,
+                    "pitch_travel_max_mm": PITCH_TRAVEL_MAX_MM,
+                    "pitch_s_max_mm": PITCH_S_MAX_MM,
                 }
             data = dict(self.latest_)
             data["connected"] = True
@@ -129,13 +145,37 @@ class PitchMotorModule(WebModule):
             return 503, {"ok": False, "error": "pitch publisher not ready"}
 
         try:
-            speed_rpm = int(body.get("speed_rpm", MCU_RPM_MIN))
             run_cmd = int(body.get("run_cmd", 0))
         except (TypeError, ValueError):
-            return 400, {"ok": False, "error": "invalid speed_rpm or run_cmd"}
+            return 400, {"ok": False, "error": "invalid run_cmd"}
 
-        if run_cmd < 0 or run_cmd > 3:
-            return 400, {"ok": False, "error": "run_cmd must be 0..3"}
+        if run_cmd not in (RUN_CMD_STOP, RUN_CMD_FWD, RUN_CMD_REV, RUN_CMD_DISPLACE_ZERO):
+            return 400, {"ok": False, "error": "run_cmd must be 0/1/2/3"}
+
+        speed_rpm = MCU_RPM_MIN
+        s_mm = None
+        target_mm = None
+
+        if run_cmd == RUN_CMD_DISPLACE_ZERO:
+            try:
+                if "displacement_mm" in body:
+                    s_mm = float(body.get("displacement_mm"))
+                else:
+                    s_mm = float(body.get("speed_rpm", 0)) / PITCH_MM_SCALE
+            except (TypeError, ValueError):
+                return 400, {"ok": False, "error": "invalid displacement_mm"}
+
+            if s_mm < 0.0:
+                s_mm = 0.0
+            if s_mm > PITCH_S_MAX_MM:
+                s_mm = PITCH_S_MAX_MM
+            target_mm = PITCH_ZERO_MM + s_mm
+            speed_rpm = int(round(s_mm * PITCH_MM_SCALE))
+        else:
+            try:
+                speed_rpm = int(body.get("speed_rpm", MCU_RPM_MIN))
+            except (TypeError, ValueError):
+                return 400, {"ok": False, "error": "invalid speed_rpm"}
 
         msg = PitchMotorCmd()
         msg.speed_rpm = speed_rpm
@@ -146,11 +186,16 @@ class PitchMotorModule(WebModule):
             self.cmd_tx_count_ += 1
             count = self.cmd_tx_count_
 
-        return 200, {
+        resp: Dict[str, Any] = {
             "ok": True,
             "speed_rpm": speed_rpm,
             "run_cmd": run_cmd,
             "run_label": RUN_LABELS.get(run_cmd, str(run_cmd)),
             "cmd_tx_count": count,
-            "note": "OBC 透传；rpm 150~3000 限幅在 MCU",
+            "note": "OBC 透传；零位 45 mm，往前朝 125 mm；软限位始终开启",
         }
+        if s_mm is not None:
+            resp["displacement_mm"] = round(s_mm, 2)
+        if target_mm is not None:
+            resp["target_mm"] = round(target_mm, 2)
+        return 200, resp

@@ -32,7 +32,7 @@ class WireDisplacementModule(WebModule):
 
     @property
     def title(self) -> str:
-        return "拉线位移 WPS MK30"
+        return "拉线位移 / 俯仰电机"
 
     def register(self, node: Node) -> None:
         node.create_subscription(

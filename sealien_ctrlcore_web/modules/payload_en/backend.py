@@ -4,7 +4,7 @@
 
 index 0~7  ↔ DEV1 Port0 PIN0~7（24V）
 index 8~15 ↔ DEV1 Port1 PIN0~7（3.3V）
-index 2 抛载；index 3+4 并联声呐 24V（同开同关）。
+index 2 抛载；index 3+4 并联声呐 24V；index 5+6 并联 DVL 24V（同开同关）。
 """
 
 import queue
@@ -30,14 +30,16 @@ VALVE_COUNT = 16
 JETTISON_INDEX = 2
 SONAR_INDEX_A = 3
 SONAR_INDEX_B = 4
+DVL_INDEX_A = 5
+DVL_INDEX_B = 6
 VALVE_LABELS: List[str] = [
     "GPIO0(阀1高压)",
     "GPIO1(阀2低压)",
     "GPIO2(抛载)",
     "GPIO3(声呐24V·并)",
     "GPIO4(声呐24V·并)",
-    "GPIO5(24V)",
-    "GPIO6(24V)",
+    "GPIO5(DVL 24V·并)",
+    "GPIO6(DVL 24V·并)",
     "GPIO7(24V)",
     "GPIO8(3.3V)",
     "GPIO9(3.3V)",
@@ -54,8 +56,8 @@ VALVE_GPIO_HINTS: List[str] = [
     "DEV1 P0 PIN2 (24V · 抛载，拉高即丢，慎重)",
     "DEV1 P0 PIN3 (24V · 声呐并联 A，与 GPIO4 同开同关)",
     "DEV1 P0 PIN4 (24V · 声呐并联 B，与 GPIO3 同开同关)",
-    "DEV1 P0 PIN5 (24V)",
-    "DEV1 P0 PIN6 (24V)",
+    "DEV1 P0 PIN5 (24V · DVL 并联 A，与 GPIO6 同开同关)",
+    "DEV1 P0 PIN6 (24V · DVL 并联 B，与 GPIO5 同开同关)",
     "DEV1 P0 PIN7 (24V)",
     "DEV1 P1 PIN0 (3.3V)",
     "DEV1 P1 PIN1 (3.3V)",
@@ -202,8 +204,13 @@ class PayloadEnModule(WebModule):
             return 400, {"ok": False, "error": "value must be 0 or 1"}
 
         targets = [index]
+        pair_label = None
         if index in (SONAR_INDEX_A, SONAR_INDEX_B):
             targets = [SONAR_INDEX_A, SONAR_INDEX_B]
+            pair_label = "声呐 GPIO3+GPIO4"
+        elif index in (DVL_INDEX_A, DVL_INDEX_B):
+            targets = [DVL_INDEX_A, DVL_INDEX_B]
+            pair_label = "DVL GPIO5+GPIO6"
 
         for target in targets:
             self._enqueue_cmd(target, value)
@@ -216,6 +223,7 @@ class PayloadEnModule(WebModule):
             "ok": True,
             "index": index,
             "paired_index": targets,
+            "pair_label": pair_label,
             "value": value,
             "label": VALVE_LABELS[index],
             "cmd_tx_count": count,
