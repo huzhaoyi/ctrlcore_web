@@ -7,41 +7,42 @@ const SONAR_INDEX_A = 3;
 const SONAR_INDEX_B = 4;
 const DVL_INDEX_A = 5;
 const DVL_INDEX_B = 6;
+const PLUNGER_EN_INDEX = 8;
 const VALVE_LABELS = [
-  "GPIO0(阀1高压)",
-  "GPIO1(阀2低压)",
-  "GPIO2(抛载)",
-  "GPIO3(声呐24V·并)",
-  "GPIO4(声呐24V·并)",
-  "GPIO5(DVL 24V·并)",
-  "GPIO6(DVL 24V·并)",
-  "GPIO7(24V)",
-  "GPIO8(3.3V)",
-  "GPIO9(3.3V)",
-  "GPIO10(3.3V)",
-  "GPIO11(3.3V)",
-  "GPIO12(3.3V)",
-  "GPIO13(3.3V)",
-  "GPIO14(3.3V)",
-  "GPIO15(3.3V)",
+  "GPIO0 阀1高压",
+  "GPIO1 阀2低压",
+  "GPIO2 抛载",
+  "GPIO3 声呐24V",
+  "GPIO4 声呐24V",
+  "GPIO5 DVL 24V",
+  "GPIO6 DVL 24V",
+  "GPIO7 高度计24V",
+  "GPIO8 柱塞泵使能",
+  "GPIO9 3.3V",
+  "GPIO10 3.3V",
+  "GPIO11 3.3V",
+  "GPIO12 3.3V",
+  "GPIO13 3.3V",
+  "GPIO14 3.3V",
+  "GPIO15 3.3V",
 ];
 const VALVE_GPIO_HINTS = [
-  "DEV1 P0 PIN0 (24V)",
-  "DEV1 P0 PIN1 (24V)",
-  "DEV1 P0 PIN2 (24V · 抛载，拉高即丢，慎重)",
-  "DEV1 P0 PIN3 (24V · 声呐并联 A，与 GPIO4 同开同关)",
-  "DEV1 P0 PIN4 (24V · 声呐并联 B，与 GPIO3 同开同关)",
-  "DEV1 P0 PIN5 (24V · DVL 并联 A，与 GPIO6 同开同关)",
-  "DEV1 P0 PIN6 (24V · DVL 并联 B，与 GPIO5 同开同关)",
-  "DEV1 P0 PIN7 (24V)",
-  "DEV1 P1 PIN0 (3.3V)",
-  "DEV1 P1 PIN1 (3.3V)",
-  "DEV1 P1 PIN2 (3.3V)",
-  "DEV1 P1 PIN3 (3.3V)",
-  "DEV1 P1 PIN4 (3.3V)",
-  "DEV1 P1 PIN5 (3.3V)",
-  "DEV1 P1 PIN6 (3.3V)",
-  "DEV1 P1 PIN7 (3.3V)",
+  "DEV1 P0 PIN0 · 24V",
+  "DEV1 P0 PIN1 · 24V",
+  "DEV1 P0 PIN2 · 24V · 抛载，拉高即丢",
+  "DEV1 P0 PIN3 · 24V · 声呐并联 A，与 GPIO4 同开同关",
+  "DEV1 P0 PIN4 · 24V · 声呐并联 B，与 GPIO3 同开同关",
+  "DEV1 P0 PIN5 · 24V · DVL 并联 A，与 GPIO6 同开同关",
+  "DEV1 P0 PIN6 · 24V · DVL 并联 B，与 GPIO5 同开同关",
+  "DEV1 P0 PIN7 · 24V · 高度计",
+  "DEV1 P1 PIN0 · 3.3V · 柱塞泵 ESCON Enable，高有效",
+  "DEV1 P1 PIN1 · 3.3V",
+  "DEV1 P1 PIN2 · 3.3V",
+  "DEV1 P1 PIN3 · 3.3V",
+  "DEV1 P1 PIN4 · 3.3V",
+  "DEV1 P1 PIN5 · 3.3V",
+  "DEV1 P1 PIN6 · 3.3V",
+  "DEV1 P1 PIN7 · 3.3V",
 ];
 
 function setText(id, text) {
@@ -69,13 +70,22 @@ function buildValveCards(startIndex, endIndex) {
           ? `<div class="hint">单路约 1A，声呐约 2A：GPIO3+GPIO4 并联，开/关任一即两路一起动</div>`
           : (index === DVL_INDEX_A || index === DVL_INDEX_B)
             ? `<div class="hint">单路约 1A：GPIO5+GPIO6 并联供 DVL，开/关任一即两路一起动</div>`
-            : "";
+            : index === PLUNGER_EN_INDEX
+              ? `<div class="hint">柱塞泵 ESCON 使能。关会使能掉、PWM 可能还在；开/关其它阀不会再带关这一路。</div>`
+              : "";
+    const extraCard =
+      index === JETTISON_INDEX
+        ? " en-card-danger"
+        : index === PLUNGER_EN_INDEX
+          ? " en-card-plunger"
+          : "";
     cards.push(`
-      <div class="card en-card${index === JETTISON_INDEX ? " en-card-danger" : ""}" id="en-card-${index}">
-        <div class="label">${VALVE_LABELS[index]} · index ${index}</div>
+      <div class="card en-card${extraCard}" id="en-card-${index}">
+        <div class="en-title">${VALVE_LABELS[index]}</div>
+        <div class="hint" style="margin:0 0 6px">index ${index}</div>
         <div class="value en-state" id="en-state-${index}">—</div>
-        <div class="hint mono-block">GPIO 输出：<span id="en-level-${index}">—</span></div>
-        <div class="hint mono-block" id="en-gpio-${index}">${VALVE_GPIO_HINTS[index]}</div>
+        <div class="en-meta">GPIO 输出：<span id="en-level-${index}">—</span></div>
+        <div class="en-meta" id="en-gpio-${index}">${VALVE_GPIO_HINTS[index]}</div>
         ${caution}
         <div class="control-row" style="margin-top:10px">
           <button type="button" class="en-btn-on${index === JETTISON_INDEX ? " is-active-warn" : ""}" data-index="${index}" data-value="1">开</button>
@@ -135,13 +145,13 @@ export default {
       <section class="panel">
         <h2>GPIO 输出</h2>
         <div>
-          <h3 style="margin:0 0 10px">24V · DEV1 Port0 · index 0~7</h3>
+          <h3 class="en-section-title">24V · DEV1 Port0 · index 0~7</h3>
           <div class="card-grid" style="grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px">
             ${buildValveCards(0, 8)}
           </div>
         </div>
         <div style="margin-top:18px">
-          <h3 style="margin:0 0 10px">3.3V · DEV1 Port1 · index 8~15</h3>
+          <h3 class="en-section-title">3.3V · DEV1 Port1 · index 8~15</h3>
           <div class="card-grid" style="grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px">
             ${buildValveCards(8, 16)}
           </div>
@@ -149,7 +159,7 @@ export default {
         <div class="control-row" style="margin-top:14px">
           <button id="en-all-off" type="button">全部关闭</button>
         </div>
-        <div id="en-cmd-result" class="hint">GPIO 为执行器操作，请谨慎；极性为高有效（1=开）。GPIO2 抛载：开启即丢，务必确认。GPIO3+GPIO4 声呐、GPIO5+GPIO6 DVL 并联同开同关。</div>
+        <div id="en-cmd-result" class="hint">GPIO 为执行器操作，请谨慎；极性为高有效（1=开）。GPIO2 抛载：开启即丢。GPIO8 是柱塞泵使能，可单独开关；控其它阀不会再把它带关。GPIO3+GPIO4 声呐、GPIO5+GPIO6 DVL 并联同开同关。</div>
       </section>
     `;
 
@@ -213,11 +223,11 @@ export default {
       const cardEl = document.getElementById(`en-card-${index}`);
       const gpioEl = document.getElementById(`en-gpio-${index}`);
       const levelEl = document.getElementById(`en-level-${index}`);
-      const labelEl = cardEl?.querySelector(".label");
+      const labelEl = cardEl?.querySelector(".en-title");
       const value = connected ? states[index] : null;
 
       if (labelEl) {
-        labelEl.textContent = `${labels[index] ?? VALVE_LABELS[index]} · index ${index}`;
+        labelEl.textContent = labels[index] ?? VALVE_LABELS[index];
       }
       if (gpioEl) {
         gpioEl.textContent = gpioHints[index] ?? VALVE_GPIO_HINTS[index];

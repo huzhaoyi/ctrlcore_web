@@ -37,6 +37,14 @@ class Elb105BackendContractTest(unittest.TestCase):
         self.assertIn("460800", self.source)
         self.assertNotIn("921600", self.source)
 
+    def test_subscription_qos_matches_driver_reliable_keep_last_1(self):
+        self.assertIn("QoSReliabilityPolicy.RELIABLE", self.source)
+        self.assertIn("QoSHistoryPolicy.KEEP_LAST", self.source)
+        self.assertIn("depth=1", self.source)
+        self.assertIn("ELB105_QOS", self.source)
+        self.assertNotIn("qos_profile_sensor_data", self.source)
+        self.assertIn("@50Hz", self.source)
+
 
 if __name__ == "__main__":
     unittest.main()

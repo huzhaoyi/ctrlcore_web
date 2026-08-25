@@ -102,7 +102,7 @@ export default {
         <div class="card-grid">
           <div class="card wide"><div class="label">硬件 / 总线</div><div id="elb-hw" class="value mono-block">--</div></div>
         </div>
-        <p class="hint">ROS <code>/elb105/shzr04</code> · SHZR04 147B 二进制帧 · 460800 baud</p>
+        <p class="hint">ROS <code>/elb105/shzr04</code> · SHZR04 147B 二进制帧 · 460800 baud · 50 Hz · reliable</p>
       </section>
 
       <section class="panel">

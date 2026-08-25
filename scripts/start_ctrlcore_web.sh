@@ -2,7 +2,9 @@
 # 启动 CtrlCore 模块化调试 Web（需 communicationservice 已在运行）
 set -euo pipefail
 
-WS="${SEALIEN_WS:-${HOME}/sealien_ws}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+DEFAULT_WS="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+WS="${SEALIEN_WS:-${DEFAULT_WS}}"
 WEB_PORT="${CTRLCORE_WEB_PORT:-8081}"
 RESTART=0
 
@@ -33,7 +35,7 @@ usage() {
     echo "  -h, --help       显示帮助"
     echo ""
     echo "环境变量:"
-    echo "  SEALIEN_WS          工作空间 (默认: ~/sealien_ws)"
+    echo "  SEALIEN_WS          工作空间 (默认: 脚本所在仓库，当前 ${DEFAULT_WS})"
     echo "  CTRLCORE_WEB_PORT   Web 端口 (默认: 8081)"
     echo ""
     echo "示例:"

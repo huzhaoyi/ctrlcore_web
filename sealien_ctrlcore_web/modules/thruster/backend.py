@@ -16,8 +16,7 @@ from rclpy.node import Node
 from rclpy.qos import qos_profile_sensor_data
 from std_msgs.msg import Bool
 
-from sealien_ctrlpilot_actuator.msg import ThrusterCommand
-from sealien_ctrlpilot_msgmanagement.msg import ThrusterStatus
+from sealien_ctrlpilot_msgmanagement.msg import ThrusterCommand, ThrusterStatus
 from sealien_ctrlcore_web.core.base_module import WebModule
 
 PWM_NEUTRAL = 1500

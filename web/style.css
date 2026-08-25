@@ -295,6 +295,36 @@ button.is-active-warn {
   color: var(--muted);
 }
 
+.en-card .en-title {
+  color: var(--text);
+  font-size: 1.12rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  margin-bottom: 8px;
+  line-height: 1.35;
+}
+
+.en-card .en-meta {
+  color: var(--mono);
+  font-size: 0.92rem;
+  margin-top: 6px;
+}
+
+.en-card .en-state {
+  font-size: 1.2rem;
+}
+
+.en-section-title {
+  margin: 0 0 12px;
+  color: var(--text);
+  font-size: 1.15rem;
+  font-weight: 700;
+}
+
+.en-card-plunger {
+  border-color: rgba(61, 139, 253, 0.55);
+}
+
 .en-state-on {
   color: var(--ok);
 }

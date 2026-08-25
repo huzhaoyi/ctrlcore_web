@@ -8,7 +8,7 @@ import time
 from typing import Any, Dict, Optional, Tuple
 
 from rclpy.node import Node
-from rclpy.qos import qos_profile_sensor_data
+from rclpy.qos import QoSHistoryPolicy, QoSProfile, QoSReliabilityPolicy
 
 from sealien_ctrlpilot_msgmanagement.msg._elb105_shzr04 import Elb105Shzr04
 from sealien_ctrlpilot_msgmanagement.srv import Elb105SendAlignment
@@ -16,7 +16,15 @@ from sealien_ctrlcore_web.core.base_module import WebModule
 from sealien_ctrlcore_web.modules.elb105.alignment_timer import AlignmentTimer
 from sealien_ctrlcore_web.modules.elb105.dvl_update_latch import DvlUpdateLatch
 
-ELB105_HARDWARE = "OBC RS422 USB · ELB105-SHZR04(3) · 460800 · SHZR04 147B"
+ELB105_HARDWARE = (
+    "OBC RS422 USB · ELB105-SHZR04(3) · 460800 · SHZR04 147B @50Hz · reliable"
+)
+# 与驱动 KeepLast(1) + reliable 对齐；best_effort 在部分 DDS 下会收不到数据。
+ELB105_QOS = QoSProfile(
+    reliability=QoSReliabilityPolicy.RELIABLE,
+    history=QoSHistoryPolicy.KEEP_LAST,
+    depth=1,
+)
 ALIGNMENT_SERVICE_TIMEOUT_SEC = 3.0
 
 ALIGNMENT_LABELS = {
@@ -71,7 +79,7 @@ class Elb105Module(WebModule):
             Elb105Shzr04,
             self.topic_name_,
             self._on_shzr04,
-            qos_profile_sensor_data,
+            ELB105_QOS,
         )
         self.align_client_ = node.create_client(
             Elb105SendAlignment, "/elb105/send_alignment"

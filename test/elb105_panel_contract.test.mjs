@@ -31,7 +31,11 @@ test("ELB105 panel shows the configured 460800 baud rate", async () => {
   const source = await readFile(panelPath, "utf8");
 
   assert.match(source, /460800 baud/);
+  assert.match(source, /50 Hz/);
+  assert.match(source, /reliable/);
   assert.doesNotMatch(source, /921600 baud/);
+  assert.doesNotMatch(source, /200 Hz/);
+  assert.doesNotMatch(source, /best_effort/);
 });
 
 test("ELB105 panel renders estimated alignment time and DVL semantic state", async () => {

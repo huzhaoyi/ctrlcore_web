@@ -1,4 +1,8 @@
 import { postModule } from "../../core/api.js";
+import {
+  plungerWireHtml,
+  updatePlungerWire,
+} from "../wire_displacement/ch0_fragment.js";
 
 const ESC_MIN = 10;
 const ESC_MAX = 90;
@@ -97,7 +101,7 @@ function pumpDutySectionHtml(prefix, title) {
 
 export default {
   id: "plunger_pump",
-  title: "柱塞泵 ESCON",
+  title: "拉线位移 / 柱塞泵",
 
   mount(root) {
     root.innerHTML = `
@@ -115,10 +119,13 @@ export default {
           <div class="card wide"><div class="label">硬件 / 总线</div><div id="pp-hw" class="value mono-block">pwm3 PC8/PC9 · ESCON 50/5 ×2</div></div>
         </div>
         <p class="hint">
-          泵0：<code>pwm3 CH3 (PC8)</code> → ESCON#1 DigIN1；泵1：<code>pwm3 CH4 (PC9)</code> → ESCON#2 DigIN1。
+          泵0：<code>pwm3 CH3 (PC8)</code> → ESCON#1 DigIN1，拉线反馈 <code>WPS CH0</code>。
+          泵1：<code>pwm3 CH4 (PC9)</code> → ESCON#2 DigIN1，无拉线。
           ESCON Studio 常使能；直通语义：下发值即 ESC 占空比%，MCU 钳到有效区 10~90%（&lt;10 停 @10%）。
         </p>
       </section>
+
+      ${plungerWireHtml()}
 
       <section class="panel">
         <h2>占空比实时状态</h2>
@@ -126,6 +133,33 @@ export default {
           ${pumpDutySectionHtml("pp0", "泵 0 · pwm3 CH3 (PC8) → ESCON#1")}
           ${pumpDutySectionHtml("pp1", "泵 1 · pwm3 CH4 (PC9) → ESCON#2")}
         </div>
+      </section>
+
+      <section class="panel">
+        <h2>单泵转 / 停（调试）</h2>
+        <p class="hint">
+          仍走 <code>/obc/plunger_pump_cmd</code>。转 = 50%（约 1620 rpm），停 = 0%（MCU 钳到 10%）。
+          只改一路时另一路保持上次下发值，避免把另一泵停掉。
+        </p>
+        <div class="card-grid">
+          <div class="card">
+            <div class="label">泵 0 · pwm3 CH3 (PC8)</div>
+            <div class="control-row" style="margin-top:8px">
+              <button id="pp-run0" type="button">转 50%</button>
+              <button id="pp-stop0" type="button"
+                style="border-color:rgba(243,18,96,0.5);background:rgba(243,18,96,0.15)">停</button>
+            </div>
+          </div>
+          <div class="card">
+            <div class="label">泵 1 · pwm3 CH4 (PC9)</div>
+            <div class="control-row" style="margin-top:8px">
+              <button id="pp-run1" type="button">转 50%</button>
+              <button id="pp-stop1" type="button"
+                style="border-color:rgba(243,18,96,0.5);background:rgba(243,18,96,0.15)">停</button>
+            </div>
+          </div>
+        </div>
+        <div id="pp-run-result" class="hint">POST /api/modules/plunger_pump/run</div>
       </section>
 
       <section class="panel">
@@ -183,6 +217,7 @@ export default {
           duty_pct_ch1: ch1,
         });
         if (data.ok) {
+          setDutyInputs(data.duty_pct_ch0, data.duty_pct_ch1);
           resultEl.textContent = `已下发 ch0=${data.duty_pct_ch0}% ch1=${data.duty_pct_ch1}% · cmd累计=${data.cmd_tx_count}`;
         } else {
           resultEl.textContent = `失败 (${status}): ${data.error || "unknown"}`;
@@ -191,6 +226,45 @@ export default {
         resultEl.textContent = `请求异常: ${err}`;
       }
     };
+
+    const setDutyInputs = (ch0, ch1) => {
+      duty0.value = String(ch0);
+      duty1.value = String(ch1);
+      duty0Range.value = String(ch0);
+      duty1Range.value = String(ch1);
+    };
+
+    const sendRun = async (channel, on) => {
+      const resultEl = document.getElementById("pp-run-result");
+      try {
+        const { status, data } = await postModule("plunger_pump", "run", {
+          channel,
+          on,
+        });
+        if (data.ok) {
+          setDutyInputs(data.duty_pct_ch0, data.duty_pct_ch1);
+          resultEl.textContent =
+            `${data.note} · 帧 ch0=${data.duty_pct_ch0}% ch1=${data.duty_pct_ch1}% · cmd累计=${data.cmd_tx_count}`;
+        } else {
+          resultEl.textContent = `失败 (${status}): ${data.error || "unknown"}`;
+        }
+      } catch (err) {
+        resultEl.textContent = `请求异常: ${err}`;
+      }
+    };
+
+    document.getElementById("pp-run0").addEventListener("click", async () => {
+      await sendRun(0, true);
+    });
+    document.getElementById("pp-stop0").addEventListener("click", async () => {
+      await sendRun(0, false);
+    });
+    document.getElementById("pp-run1").addEventListener("click", async () => {
+      await sendRun(1, true);
+    });
+    document.getElementById("pp-stop1").addEventListener("click", async () => {
+      await sendRun(1, false);
+    });
 
     document.getElementById("pp-send").addEventListener("click", async () => {
       await sendCmd(Number(duty0.value), Number(duty1.value));
@@ -206,6 +280,7 @@ export default {
   },
 
   update(snapshot) {
+    updatePlungerWire(snapshot);
     const data = snapshot.modules?.plunger_pump;
     if (!data) {
       return;

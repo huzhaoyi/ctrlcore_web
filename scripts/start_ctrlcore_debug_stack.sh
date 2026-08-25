@@ -2,10 +2,11 @@
 # 一键启动：MAVLink 网关 + CtrlCore 调试 Web
 set -euo pipefail
 
-WS="${SEALIEN_WS:-${HOME}/sealien_ws}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+DEFAULT_WS="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+WS="${SEALIEN_WS:-${DEFAULT_WS}}"
 WEB_PORT="${CTRLCORE_WEB_PORT:-8081}"
 RESTART=0
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 COMM_PID=""
 WEB_PID=""
@@ -55,7 +56,7 @@ usage() {
     echo "  -h, --help       显示帮助"
     echo ""
     echo "环境变量:"
-    echo "  SEALIEN_WS          工作空间 (默认: ~/sealien_ws)"
+    echo "  SEALIEN_WS          工作空间 (默认: 脚本所在仓库，当前 ${DEFAULT_WS})"
     echo "  CTRLCORE_WEB_PORT   Web 端口 (默认: 8081)"
 }
 
@@ -130,6 +131,7 @@ STARTED=1
 
 echo ""
 echo "=== CtrlCore 调试栈已启动 ==="
+echo "  工作空间: ${WS}"
 echo "  MAVLink: UDP 9999 (mavlink_bridge_node)"
 echo "  Web:     http://127.0.0.1:${WEB_PORT}/"
 echo "  停止:    Ctrl+C 或 ${SCRIPT_DIR}/stop_ctrlcore_debug_stack.sh"

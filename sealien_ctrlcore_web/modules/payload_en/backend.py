@@ -4,7 +4,7 @@
 
 index 0~7  ↔ DEV1 Port0 PIN0~7（24V）
 index 8~15 ↔ DEV1 Port1 PIN0~7（3.3V）
-index 2 抛载；index 3+4 并联声呐 24V；index 5+6 并联 DVL 24V（同开同关）。
+index 2 抛载；index 3+4 并联声呐 24V；index 5+6 并联 DVL 24V（同开同关）；index 7 高度计 24V。
 """
 
 import queue
@@ -33,43 +33,43 @@ SONAR_INDEX_B = 4
 DVL_INDEX_A = 5
 DVL_INDEX_B = 6
 VALVE_LABELS: List[str] = [
-    "GPIO0(阀1高压)",
-    "GPIO1(阀2低压)",
-    "GPIO2(抛载)",
-    "GPIO3(声呐24V·并)",
-    "GPIO4(声呐24V·并)",
-    "GPIO5(DVL 24V·并)",
-    "GPIO6(DVL 24V·并)",
-    "GPIO7(24V)",
-    "GPIO8(3.3V)",
-    "GPIO9(3.3V)",
-    "GPIO10(3.3V)",
-    "GPIO11(3.3V)",
-    "GPIO12(3.3V)",
-    "GPIO13(3.3V)",
-    "GPIO14(3.3V)",
-    "GPIO15(3.3V)",
+    "GPIO0 阀1高压",
+    "GPIO1 阀2低压",
+    "GPIO2 抛载",
+    "GPIO3 声呐24V",
+    "GPIO4 声呐24V",
+    "GPIO5 DVL 24V",
+    "GPIO6 DVL 24V",
+    "GPIO7 高度计24V",
+    "GPIO8 柱塞泵使能",
+    "GPIO9 3.3V",
+    "GPIO10 3.3V",
+    "GPIO11 3.3V",
+    "GPIO12 3.3V",
+    "GPIO13 3.3V",
+    "GPIO14 3.3V",
+    "GPIO15 3.3V",
 ]
 VALVE_GPIO_HINTS: List[str] = [
-    "DEV1 P0 PIN0 (24V)",
-    "DEV1 P0 PIN1 (24V)",
-    "DEV1 P0 PIN2 (24V · 抛载，拉高即丢，慎重)",
-    "DEV1 P0 PIN3 (24V · 声呐并联 A，与 GPIO4 同开同关)",
-    "DEV1 P0 PIN4 (24V · 声呐并联 B，与 GPIO3 同开同关)",
-    "DEV1 P0 PIN5 (24V · DVL 并联 A，与 GPIO6 同开同关)",
-    "DEV1 P0 PIN6 (24V · DVL 并联 B，与 GPIO5 同开同关)",
-    "DEV1 P0 PIN7 (24V)",
-    "DEV1 P1 PIN0 (3.3V)",
-    "DEV1 P1 PIN1 (3.3V)",
-    "DEV1 P1 PIN2 (3.3V)",
-    "DEV1 P1 PIN3 (3.3V)",
-    "DEV1 P1 PIN4 (3.3V)",
-    "DEV1 P1 PIN5 (3.3V)",
-    "DEV1 P1 PIN6 (3.3V)",
-    "DEV1 P1 PIN7 (3.3V)",
+    "DEV1 P0 PIN0 · 24V",
+    "DEV1 P0 PIN1 · 24V",
+    "DEV1 P0 PIN2 · 24V · 抛载，拉高即丢",
+    "DEV1 P0 PIN3 · 24V · 声呐并联 A，与 GPIO4 同开同关",
+    "DEV1 P0 PIN4 · 24V · 声呐并联 B，与 GPIO3 同开同关",
+    "DEV1 P0 PIN5 · 24V · DVL 并联 A，与 GPIO6 同开同关",
+    "DEV1 P0 PIN6 · 24V · DVL 并联 B，与 GPIO5 同开同关",
+    "DEV1 P0 PIN7 · 24V · 高度计",
+    "DEV1 P1 PIN0 · 3.3V · 柱塞泵 ESCON Enable，高有效",
+    "DEV1 P1 PIN1 · 3.3V",
+    "DEV1 P1 PIN2 · 3.3V",
+    "DEV1 P1 PIN3 · 3.3V",
+    "DEV1 P1 PIN4 · 3.3V",
+    "DEV1 P1 PIN5 · 3.3V",
+    "DEV1 P1 PIN6 · 3.3V",
+    "DEV1 P1 PIN7 · 3.3V",
 ]
 PAYLOAD_EN_HARDWARE = (
-    "TCA9535 软件I2C · DEV1 P0×8 24V + P1×8 3.3V · 高有效 · 默认全关"
+    "TCA9535 软件I2C · DEV1 P0×8 24V + P1×8 3.3V · GPIO8=柱塞泵使能 · 高有效"
 )
 
 
