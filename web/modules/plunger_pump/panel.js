@@ -119,8 +119,9 @@ export default {
           <div class="card wide"><div class="label">硬件 / 总线</div><div id="pp-hw" class="value mono-block">pwm3 PC8/PC9 · ESCON 50/5 ×2</div></div>
         </div>
         <p class="hint">
-          泵0：<code>pwm3 CH3 (PC8)</code> → ESCON#1 DigIN1，拉线反馈 <code>WPS CH0</code>。
-          泵1：<code>pwm3 CH4 (PC9)</code> → ESCON#2 DigIN1，无拉线。
+          两路泵并联同一根拉线（<code>WPS CH0</code>）：单开较慢，双开较快。
+          泵0：<code>pwm3 CH3 (PC8)</code> → ESCON#1 DigIN1。
+          泵1：<code>pwm3 CH4 (PC9)</code> → ESCON#2 DigIN1。
           ESCON Studio 常使能；直通语义：下发值即 ESC 占空比%，MCU 钳到有效区 10~90%（&lt;10 停 @10%）。
         </p>
       </section>
@@ -139,7 +140,8 @@ export default {
         <h2>单泵转 / 停（调试）</h2>
         <p class="hint">
           仍走 <code>/obc/plunger_pump_cmd</code>。转 = 50%（约 1620 rpm），停 = 0%（MCU 钳到 10%）。
-          只改一路时另一路保持上次下发值，避免把另一泵停掉。
+          只改一路时另一路保持上次下发值：单开 = 慢速，双开 = 较快。
+          CH0 ≥ 176.29 mm 时 MCU 强制两路都停。
         </p>
         <div class="card-grid">
           <div class="card">
@@ -280,8 +282,19 @@ export default {
   },
 
   update(snapshot) {
-    updatePlungerWire(snapshot);
+    const atMax = updatePlungerWire(snapshot);
     const data = snapshot.modules?.plunger_pump;
+    const run0 = document.getElementById("pp-run0");
+    const run1 = document.getElementById("pp-run1");
+    const limitTitle = atMax ? "CH0 已到 176.29 mm，两路禁止转" : "";
+    if (run0) {
+      run0.disabled = Boolean(atMax);
+      run0.title = limitTitle;
+    }
+    if (run1) {
+      run1.disabled = Boolean(atMax);
+      run1.title = limitTitle;
+    }
     if (!data) {
       return;
     }

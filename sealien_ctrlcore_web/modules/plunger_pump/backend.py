@@ -25,6 +25,16 @@ PLUNGER_DUTY_ESC_MAX = 90
 PLUNGER_RPM_MAX = 3240
 PLUNGER_RUN_DUTY_PCT = 50
 PLUNGER_STOP_DUTY_PCT = 0
+PLUNGER_WIRE_CH = 0
+PLUNGER_TRAVEL_MAX_MM = 176.29
+
+
+def plunger_ch0_at_max(displacement_mm: Any) -> bool:
+    """CH0 ≥ 176.29 mm 时两路柱塞泵 PWM 禁止；另一侧行程未标定。"""
+    try:
+        return float(displacement_mm) >= PLUNGER_TRAVEL_MAX_MM
+    except (TypeError, ValueError):
+        return False
 
 
 class PlungerPumpModule(WebModule):
@@ -103,6 +113,8 @@ class PlungerPumpModule(WebModule):
                     "rpm_note": "估算转速（占空比映射，非编码器）",
                     "run_duty_pct": PLUNGER_RUN_DUTY_PCT,
                     "stop_duty_pct": PLUNGER_STOP_DUTY_PCT,
+                    "wire_ch": PLUNGER_WIRE_CH,
+                    "travel_max_mm": PLUNGER_TRAVEL_MAX_MM,
                     "latched_duty_ch0": self.latched_duty_[0],
                     "latched_duty_ch1": self.latched_duty_[1],
                 }
@@ -110,6 +122,8 @@ class PlungerPumpModule(WebModule):
             data["connected"] = True
             data["run_duty_pct"] = PLUNGER_RUN_DUTY_PCT
             data["stop_duty_pct"] = PLUNGER_STOP_DUTY_PCT
+            data["wire_ch"] = PLUNGER_WIRE_CH
+            data["travel_max_mm"] = PLUNGER_TRAVEL_MAX_MM
             data["latched_duty_ch0"] = self.latched_duty_[0]
             data["latched_duty_ch1"] = self.latched_duty_[1]
             if self.last_rx_mono_ is not None:
