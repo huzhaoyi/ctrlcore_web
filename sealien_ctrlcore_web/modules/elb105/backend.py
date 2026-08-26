@@ -178,9 +178,9 @@ class Elb105Module(WebModule):
                 alignment_status, f"未知状态 ({alignment_status})"
             ),
             "alignment_ok": alignment_status == 3,
-            "gyro_x_radps": float(msg.gyro_x_radps),
-            "gyro_y_radps": float(msg.gyro_y_radps),
-            "gyro_z_radps": float(msg.gyro_z_radps),
+            "gyro_x_degps": float(msg.gyro_x_degps),
+            "gyro_y_degps": float(msg.gyro_y_degps),
+            "gyro_z_degps": float(msg.gyro_z_degps),
             "accel_x_mps2": float(msg.accel_x_mps2),
             "accel_y_mps2": float(msg.accel_y_mps2),
             "accel_z_mps2": float(msg.accel_z_mps2),

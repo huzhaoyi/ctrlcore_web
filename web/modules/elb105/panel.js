@@ -142,7 +142,7 @@ export default {
       </section>
 
       <section class="panel">
-        <h2>角速度 (rad/s)</h2>
+        <h2>角速度 (deg/s)</h2>
         <div class="card-grid">
           ${card("X", "elb-gyro-x")}
           ${card("Y", "elb-gyro-y")}
