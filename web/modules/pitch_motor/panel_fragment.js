@@ -7,14 +7,29 @@ const RUN_CMD = {
   DISPLACE_ZERO: 3,
 };
 
-const PITCH_ZERO_MM = 45.0;
-const PITCH_S_MAX_MM = 80.0;
+const PITCH_TRAVEL_MIN_MM = 45.0;
+const PITCH_TRAVEL_MAX_MM = 125.0;
+const PITCH_ZERO_MM = (PITCH_TRAVEL_MIN_MM + PITCH_TRAVEL_MAX_MM) * 0.5;
 
 function setText(id, text) {
   const el = document.getElementById(id);
   if (el) {
     el.textContent = text;
   }
+}
+
+function clampPct(pct) {
+  const num = Number(pct);
+  if (!Number.isFinite(num)) {
+    return 0.0;
+  }
+  return Math.max(-100.0, Math.min(100.0, num));
+}
+
+function pctToMm(pct) {
+  const span = PITCH_TRAVEL_MAX_MM - PITCH_TRAVEL_MIN_MM;
+  const mid = (PITCH_TRAVEL_MIN_MM + PITCH_TRAVEL_MAX_MM) * 0.5;
+  return mid + clampPct(pct) * span * 0.005;
 }
 
 export function pitchMotorHtml() {
@@ -26,7 +41,8 @@ export function pitchMotorHtml() {
           <div class="card"><div class="label">设定 / 实际转速 (rpm)</div><div id="pitch-rpm-pair" class="value mono-block">— / —</div></div>
           <div class="card"><div class="label">运行状态</div><div id="pitch-run-label" class="value">—</div></div>
           <div class="card"><div class="label">故障</div><div id="pitch-fault-label" class="value">—</div></div>
-          <div class="card"><div class="label">母线 V / A</div><div id="pitch-bus-pair" class="value mono-block">— / —</div></div>
+          <div class="card"><div class="label">目标 / 实际 %</div><div id="pitch-pct-pair" class="value mono-block">— / —</div></div>
+          <div class="card"><div class="label">推算目标 / 实际 mm</div><div id="pitch-mm-pair" class="value mono-block">— / —</div></div>
           <div class="card"><div class="label">距上次更新 (s)</div><div id="pitch-age" class="value">--</div></div>
         </div>
         <div class="card-grid">
@@ -45,55 +61,55 @@ export function pitchMotorHtml() {
           <button id="pitch-stop" type="button"
             style="min-width:120px;border-color:rgba(243,18,96,0.5);background:rgba(243,18,96,0.15)">停止</button>
         </div>
-        <div id="pitch-cmd-result" class="hint">软限位 CH1：正转≤45 mm、反转≥125 mm；停止后等下一条位移指令再进位置环</div>
+        <div id="pitch-cmd-result" class="hint">软限位 CH1：正转≤45 mm、反转≥125 mm；零位 0% = ${PITCH_ZERO_MM.toFixed(0)} mm</div>
       </section>
 
       <section class="panel">
         <h2>位置环（正式控制）</h2>
         <p class="hint" style="margin-top:0">
-          零位 = 拉线 <strong>45 mm</strong>；往前朝 <strong>125 mm</strong>（读数增大）。
-          发位移 s → 目标 = 45 + s（最大 s = 80 mm）。外控只发目标，无需取消闭环。
+          <code>run_cmd=3</code> 发 <strong>±100%</strong>。MCU 标定：
+          <strong>45 mm = -100%</strong>，<strong>零位 ${PITCH_ZERO_MM.toFixed(0)} mm = 0%</strong>，<strong>125 mm = +100%</strong>。
+          PID 内部仍用 mm。拉线原始 mm 走 CH1 / <code>/WireDisplacementStatus</code>。
+          推算 mm 仅按 45/125 标定本地换算，方便对照，不是传感器读数。
         </p>
         <div class="card-grid">
           <div class="card">
-            <div class="label">往前位移 s (mm)</div>
-            <input id="pitch-s-input" type="number" min="0" max="80" step="0.5" value="10"
+            <div class="label">目标百分比 (%)</div>
+            <input id="pitch-pct-input" type="number" min="-100" max="100" step="1" value="0"
               style="width:100%;padding:8px;border-radius:8px;border:1px solid var(--border);background:#0f1419;color:var(--text)">
-            <p class="hint">0~80；例 s=20 → 目标 65 mm</p>
+            <p class="hint">-100~100；0% 为零位 ${PITCH_ZERO_MM.toFixed(0)} mm。右侧推算 mm 不下发</p>
           </div>
-          <div class="card"><div class="label">推算目标绝对 mm</div><div id="pitch-s-target" class="value mono-block">55.0</div></div>
+          <div class="card"><div class="label">推算拉线 mm</div><div id="pitch-pct-mm" class="value mono-block">${PITCH_ZERO_MM.toFixed(1)}</div></div>
         </div>
         <div class="control-row" style="margin-top:12px;display:flex;flex-wrap:wrap;gap:10px">
-          <button id="pitch-go-s" type="button"
-            style="min-width:140px;border-color:rgba(241,196,15,0.55);background:rgba(241,196,15,0.18)">执行位移</button>
+          <button id="pitch-go-pct" type="button"
+            style="min-width:140px;border-color:rgba(241,196,15,0.55);background:rgba(241,196,15,0.18)">执行百分比</button>
+          <button id="pitch-go-zero" type="button"
+            style="min-width:140px;border-color:rgba(241,196,15,0.55);background:rgba(241,196,15,0.10)">回零 (0% / ${PITCH_ZERO_MM.toFixed(0)} mm)</button>
         </div>
         <div id="pitch-s-result" class="hint">PID 位置闭环：死带内停机，超差持续纠偏</div>
         <p class="hint" style="margin-top:8px">
           命令：<code>/obc/pitch_cmd</code> → MAVLink <code>PITCH_CMD</code>；
-          状态：<code>/PitchMotorStatus</code> · uart4 RS485 BLD005-LR
+          状态：<code>/PitchMotorStatus</code>（含 target/actual %）
         </p>
       </section>
     `;
 }
 
-function updateSTargetPreview() {
-  const sInput = document.getElementById("pitch-s-input");
-  const targetEl = document.getElementById("pitch-s-target");
-  if (!sInput || !targetEl) {
+function updatePctPreview() {
+  const pctInput = document.getElementById("pitch-pct-input");
+  const mmEl = document.getElementById("pitch-pct-mm");
+  if (!pctInput || !mmEl) {
     return;
   }
-  let s = Number(sInput.value);
-  if (!Number.isFinite(s)) {
-    s = 0.0;
-  }
-  s = Math.max(0.0, Math.min(PITCH_S_MAX_MM, s));
-  targetEl.textContent = (PITCH_ZERO_MM + s).toFixed(1);
+  const pct = clampPct(pctInput.value);
+  mmEl.textContent = pctToMm(pct).toFixed(1);
 }
 
 export function mountPitchMotorControls() {
   const resultEl = document.getElementById("pitch-cmd-result");
   const speedInput = document.getElementById("pitch-speed-input");
-  const sInput = document.getElementById("pitch-s-input");
+  const pctInput = document.getElementById("pitch-pct-input");
   const sResultEl = document.getElementById("pitch-s-result");
 
   const sendPitchCmd = async (runCmd, actionLabel, extraBody = {}) => {
@@ -106,9 +122,9 @@ export function mountPitchMotorControls() {
       const { status, data } = await postModule("pitch_motor", "cmd", body);
       if (data.ok) {
         let text = `${actionLabel}：run_cmd=${data.run_cmd} · ${data.run_label} · cmd累计=${data.cmd_tx_count}`;
-        if (data.displacement_mm != null) {
-          text += ` · s=${data.displacement_mm} mm → 目标 ${data.target_mm} mm`;
-        } else if (data.speed_rpm != null && runCmd <= 3) {
+        if (data.target_pct != null) {
+          text += ` · ${data.target_pct}% → ${data.target_mm} mm`;
+        } else if (data.speed_rpm != null && runCmd <= 2) {
           text += ` · rpm=${data.speed_rpm}`;
         }
         resultEl.textContent = text;
@@ -141,22 +157,28 @@ export function mountPitchMotorControls() {
     sendPitchCmd(RUN_CMD.STOP, "停止");
   });
 
-  if (sInput) {
-    sInput.addEventListener("input", updateSTargetPreview);
-    updateSTargetPreview();
+  if (pctInput) {
+    pctInput.addEventListener("input", updatePctPreview);
+    updatePctPreview();
   }
 
-  document.getElementById("pitch-go-s").addEventListener("click", () => {
-    let s = Number(sInput.value);
-    if (!Number.isFinite(s)) {
-      sResultEl.textContent = "位移无效";
-      return;
-    }
-    s = Math.max(0.0, Math.min(PITCH_S_MAX_MM, s));
-    sInput.value = String(s);
-    updateSTargetPreview();
-    sendPitchCmd(RUN_CMD.DISPLACE_ZERO, "执行位移", { displacement_mm: s });
+  document.getElementById("pitch-go-pct").addEventListener("click", () => {
+    const pct = clampPct(pctInput.value);
+    pctInput.value = String(pct);
+    updatePctPreview();
+    sendPitchCmd(RUN_CMD.DISPLACE_ZERO, "执行百分比", { target_pct: pct });
   });
+
+  const goZero = document.getElementById("pitch-go-zero");
+  if (goZero) {
+    goZero.addEventListener("click", () => {
+      if (pctInput) {
+        pctInput.value = "0";
+      }
+      updatePctPreview();
+      sendPitchCmd(RUN_CMD.DISPLACE_ZERO, "回零", { target_pct: 0.0 });
+    });
+  }
 }
 
 export function updatePitchMotor(snapshot) {
@@ -172,7 +194,8 @@ export function updatePitchMotor(snapshot) {
     setText("pitch-rpm-pair", "— / —");
     setText("pitch-run-label", "—");
     setText("pitch-fault-label", "—");
-    setText("pitch-bus-pair", "— / —");
+    setText("pitch-pct-pair", "— / —");
+    setText("pitch-mm-pair", "— / —");
     return;
   }
 
@@ -182,7 +205,19 @@ export function updatePitchMotor(snapshot) {
   setText("pitch-run-label", data.run_label ?? "—");
   setText("pitch-fault-label", data.fault_label ?? "—");
 
-  const busV = data.bus_voltage_v != null ? String(data.bus_voltage_v) : "—";
-  const busA = data.bus_current_a != null ? String(data.bus_current_a) : "—";
-  setText("pitch-bus-pair", `${busV} / ${busA}`);
+  const tgtPct = data.target_pct != null ? Number(data.target_pct).toFixed(1) : "—";
+  const actPct = data.actual_pct != null ? Number(data.actual_pct).toFixed(1) : "—";
+  setText("pitch-pct-pair", `${tgtPct} / ${actPct}`);
+
+  let tgtMm = data.target_mm;
+  let actMm = data.actual_mm;
+  if (tgtMm == null && data.target_pct != null) {
+    tgtMm = pctToMm(data.target_pct);
+  }
+  if (actMm == null && data.actual_pct != null) {
+    actMm = pctToMm(data.actual_pct);
+  }
+  const tgtMmText = tgtMm != null ? Number(tgtMm).toFixed(2) : "—";
+  const actMmText = actMm != null ? Number(actMm).toFixed(2) : "—";
+  setText("pitch-mm-pair", `${tgtMmText} / ${actMmText}`);
 }

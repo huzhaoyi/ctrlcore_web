@@ -1,20 +1,17 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""TD10A 推进器：/ThrusterStatus 展示 + /thruster_command、/obc/thruster_lock 下发。
+"""TD10A 推进器：/ThrusterStatus 展示 + /thruster_command 下发。
 
-推力保活仅在 stream 开启时周期发布；停止 stream 后不再发 THRUSTER_CMD，
-便于验证 MCU 断流看门狗。上锁/解锁只走 /obc/thruster_lock。
+油门走 thrusts，锁走 thruster_unlocked，都在同一条命令里。
+推力保活仅在 stream 开启时周期发布；停止 stream 后不再发，交给 MCU/网关断流 failsafe。
 """
 
-import queue
 import threading
 import time
-from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple
 
 from rclpy.node import Node
 from rclpy.qos import qos_profile_sensor_data
-from std_msgs.msg import Bool
 
 from sealien_ctrlpilot_msgmanagement.msg import ThrusterCommand, ThrusterStatus
 from sealien_ctrlcore_web.core.base_module import WebModule
@@ -27,7 +24,6 @@ THRUSTER_ACTIVE_COUNT = 1
 THRUSTER_ARRAY_SIZE = 12
 THRUSTER_STATUS_TOPIC = "/ThrusterStatus"
 THRUSTER_CMD_TOPIC = "/thruster_command"
-THRUSTER_LOCK_TOPIC = "/obc/thruster_lock"
 THRUSTER_HARDWARE = "fdcan2 · TD10A · main_out · Node 0x01 @500k"
 
 THRUSTER0_META = {
@@ -114,11 +110,6 @@ def _build_channel_snapshot(
     }
 
 
-@dataclass
-class _ThrusterLockJob:
-    locked: bool
-
-
 class ThrusterModule(WebModule):
     def __init__(self) -> None:
         self.lock_ = threading.Lock()
@@ -128,11 +119,11 @@ class ThrusterModule(WebModule):
         self.last_rx_mono_: Optional[float] = None
         self.latest_: Optional[Dict[str, Any]] = None
         self.last_cmd_speed_: int = PWM_NEUTRAL
+        self.unlocked_: bool = False
         self.stream_enabled_: bool = False
+        self.cmd_oneshot_: bool = False
 
         self.cmd_pub_ = None
-        self.lock_pub_ = None
-        self.lock_queue_: queue.Queue = queue.Queue()
 
     @property
     def module_id(self) -> str:
@@ -144,7 +135,6 @@ class ThrusterModule(WebModule):
 
     def register(self, node: Node) -> None:
         self.cmd_pub_ = node.create_publisher(ThrusterCommand, THRUSTER_CMD_TOPIC, 10)
-        self.lock_pub_ = node.create_publisher(Bool, THRUSTER_LOCK_TOPIC, 10)
         node.create_subscription(
             ThrusterStatus,
             THRUSTER_STATUS_TOPIC,
@@ -153,29 +143,25 @@ class ThrusterModule(WebModule):
         )
 
     def drain_publish_queue(self) -> None:
-        if self.cmd_pub_ is None or self.lock_pub_ is None:
+        if self.cmd_pub_ is None:
             return
 
         with self.lock_:
             stream_on = self.stream_enabled_
             heartbeat_speed = self.last_cmd_speed_
+            unlocked = self.unlocked_
+            one_shot = self.cmd_oneshot_
+            self.cmd_oneshot_ = False
 
-        # 仅 stream 开启时保活；停止后不再发 THRUSTER_CMD，交给 MCU/网关断流 failsafe。
-        if stream_on:
-            heartbeat_msg = ThrusterCommand()
-            heartbeat_msg.pwm = [int(v) for v in self._build_pwm(heartbeat_speed)]
-            heartbeat_msg.thrusts = []
-            heartbeat_msg.thruster_unlocked = True
-            self.cmd_pub_.publish(heartbeat_msg)
+        # 仅 stream 开启时保活；锁按钮在未开周期时发一帧。停止后交给 MCU/网关断流 failsafe。
+        if stream_on or one_shot:
+            self._publish_command(heartbeat_speed, unlocked)
 
-        while True:
-            try:
-                job = self.lock_queue_.get_nowait()
-            except queue.Empty:
-                break
-            lock_msg = Bool()
-            lock_msg.data = bool(job.locked)
-            self.lock_pub_.publish(lock_msg)
+    def _publish_command(self, speed: int, unlocked: bool) -> None:
+        msg = ThrusterCommand()
+        msg.thrusts = [int(v) for v in self._build_thrusts(speed)]
+        msg.thruster_unlocked = bool(unlocked)
+        self.cmd_pub_.publish(msg)
 
     @staticmethod
     def _clamp_speed(speed: int) -> int:
@@ -187,17 +173,22 @@ class ThrusterModule(WebModule):
         speed = PWM_NEUTRAL + int(clamped * 500.0 / 100.0)
         return ThrusterModule._clamp_speed(speed)
 
-    def _build_pwm(self, speed: int) -> list:
-        pwm = [PWM_NEUTRAL] * PWM_CHANNEL_COUNT
-        pwm[0] = self._clamp_speed(speed)
-        return pwm
+    def _build_thrusts(self, speed: int) -> list:
+        thrusts = [PWM_NEUTRAL] * PWM_CHANNEL_COUNT
+        thrusts[0] = self._clamp_speed(speed)
+        return thrusts
 
     def _parse_speed(self, body: Dict[str, Any]) -> Tuple[Optional[int], Optional[str]]:
+        if "thrusts" in body:
+            raw = body["thrusts"]
+            if isinstance(raw, (list, tuple)) and len(raw) > 0:
+                return self._clamp_speed(int(raw[0])), None
+            return None, "thrusts[0] required"
         if "speed" in body:
             return self._clamp_speed(int(body["speed"])), None
         if "percent" in body:
             return self._percent_to_speed(body["percent"]), None
-        return None, "need speed (1000~2000) or percent (-100~100)"
+        return None, "need thrusts[0] / speed (1000~2000) or percent (-100~100)"
 
     def _set_speed(self, speed: int) -> int:
         clamped = self._clamp_speed(speed)
@@ -205,9 +196,10 @@ class ThrusterModule(WebModule):
             self.last_cmd_speed_ = clamped
         return clamped
 
-    def _enqueue_lock(self, locked: bool) -> None:
-        self.lock_queue_.put(_ThrusterLockJob(locked=bool(locked)))
+    def _set_unlocked(self, unlocked: bool) -> None:
         with self.lock_:
+            self.unlocked_ = bool(unlocked)
+            self.cmd_oneshot_ = True
             self.lock_tx_count_ += 1
 
     def _on_thruster(self, msg: ThrusterStatus) -> None:
@@ -229,7 +221,7 @@ class ThrusterModule(WebModule):
         snapshot = {
             "status_topic": THRUSTER_STATUS_TOPIC,
             "cmd_topic": THRUSTER_CMD_TOPIC,
-            "lock_topic": THRUSTER_LOCK_TOPIC,
+            "lock_field": "thruster_unlocked",
             "hardware": THRUSTER_HARDWARE,
             "mcn_topic": "thruster",
             "mavlink_status_msg": "THRUSTER_STATUS (id=2, 20Hz)",
@@ -264,6 +256,7 @@ class ThrusterModule(WebModule):
             snapshot["lock_tx_count"] = self.lock_tx_count_
             snapshot["last_cmd_speed"] = self.last_cmd_speed_
             snapshot["last_cmd_percent"] = round(_pwm_to_percent(self.last_cmd_speed_), 1)
+            snapshot["thruster_unlocked"] = self.unlocked_
             snapshot["stream_enabled"] = self.stream_enabled_
             self.latest_ = snapshot
 
@@ -278,19 +271,25 @@ class ThrusterModule(WebModule):
                     "lock_tx_count": self.lock_tx_count_,
                     "last_cmd_speed": self.last_cmd_speed_,
                     "last_cmd_percent": round(_pwm_to_percent(self.last_cmd_speed_), 1),
+                    "thruster_unlocked": self.unlocked_,
                     "stream_enabled": self.stream_enabled_,
                     "status_topic": THRUSTER_STATUS_TOPIC,
+                    "cmd_topic": THRUSTER_CMD_TOPIC,
+                    "lock_field": "thruster_unlocked",
                     "hardware": THRUSTER_HARDWARE,
+                    "thrusts_range": [PWM_MIN, PWM_NEUTRAL, PWM_MAX],
                     "pwm_range": [PWM_MIN, PWM_NEUTRAL, PWM_MAX],
                 }
             data = dict(self.latest_)
             data["connected"] = True
             if self.last_rx_mono_ is not None:
                 data["age_sec"] = round(time.monotonic() - self.last_rx_mono_, 3)
+            data["thrusts_range"] = [PWM_MIN, PWM_NEUTRAL, PWM_MAX]
             data["pwm_range"] = [PWM_MIN, PWM_NEUTRAL, PWM_MAX]
             data["stream_enabled"] = self.stream_enabled_
             data["last_cmd_speed"] = self.last_cmd_speed_
             data["last_cmd_percent"] = round(_pwm_to_percent(self.last_cmd_speed_), 1)
+            data["thruster_unlocked"] = self.unlocked_
             return data
 
     def is_alive(self, now_sec: float, stale_sec: float) -> bool:
@@ -301,11 +300,13 @@ class ThrusterModule(WebModule):
             return (time.monotonic() - self.last_rx_mono_) <= stale_sec
 
     def handle_post(self, action: str, body: Dict[str, Any]) -> Tuple[int, Dict[str, Any]]:
-        if self.cmd_pub_ is None or self.lock_pub_ is None:
+        if self.cmd_pub_ is None:
             return 503, {"ok": False, "error": "thruster publishers not ready"}
 
         if action == "stream_start":
-            speed, err = self._parse_speed(body) if ("speed" in body or "percent" in body) else (None, None)
+            speed, err = self._parse_speed(body) if (
+                "speed" in body or "percent" in body or "thrusts" in body
+            ) else (None, None)
             if err:
                 return 400, {"ok": False, "error": err}
             if speed is None:
@@ -314,6 +315,7 @@ class ThrusterModule(WebModule):
             speed = self._set_speed(speed)
             with self.lock_:
                 self.stream_enabled_ = True
+                self.unlocked_ = True
                 self.cmd_tx_count_ += 1
                 cmd_tx_count = self.cmd_tx_count_
             return 200, {
@@ -322,7 +324,7 @@ class ThrusterModule(WebModule):
                 "speed": speed,
                 "percent": round(_pwm_to_percent(speed), 1),
                 "cmd_tx_count": cmd_tx_count,
-                "note": "已开启周期保活；停止后 MCU 应触发断流看门狗",
+                "note": "已开启周期保活（thrusts + thruster_unlocked=true）；停止后 MCU 应触发断流看门狗",
             }
 
         if action == "stream_stop":
@@ -353,10 +355,11 @@ class ThrusterModule(WebModule):
                 "speed": speed,
                 "percent": round(_pwm_to_percent(speed), 1),
                 "pwm0": speed,
+                "thrusts0": speed,
                 "stream_enabled": stream_on,
                 "cmd_tx_count": cmd_tx_count,
                 "note": (
-                    f"目标已更新 PWM={speed}；"
+                    f"目标已更新 thrusts[0]={speed}；"
                     + ("正在周期下发" if stream_on else "未开周期，尚未下发（请先点周期发送）")
                 ),
             }
@@ -386,13 +389,19 @@ class ThrusterModule(WebModule):
                 locked = raw
             else:
                 locked = int(raw) != 0
-            self._enqueue_lock(locked)
+            self._set_unlocked(not locked)
             with self.lock_:
                 lock_tx_count = self.lock_tx_count_
+                unlocked = self.unlocked_
             return 200, {
                 "ok": True,
                 "lock": 1 if locked else 0,
+                "thruster_unlocked": unlocked,
                 "lock_tx_count": lock_tx_count,
+                "note": (
+                    f"已请求 thruster_unlocked={str(unlocked).lower()}；"
+                    "未开周期时网关超时可能重新上锁"
+                ),
             }
 
         return super().handle_post(action, body)

@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""柱塞泵 ×2 ESCON 50/5：/PlungerPumpStatus + /obc/plunger_pump_cmd。
+"""浮力驱动：/PlungerPumpStatus + /obc/plunger_pump_cmd + /BuoyancyOilStatus。
 
+油量百分比由 MCU 从拉线 CH0 标定换算（0 mm=0%，176.29 mm=100%），50 Hz。
 直通语义：下发值即 ESC 占空比%，MCU 钳到 10~90%，<10 视为停泵(=10%)。
 单泵调试：POST /run {channel, on}，转=50%、停=0%，另一路保持上次下发。
 """
@@ -13,11 +14,16 @@ from typing import Any, Dict, Optional, Tuple
 from rclpy.node import Node
 from rclpy.qos import qos_profile_sensor_data
 
-from sealien_ctrlpilot_msgmanagement.msg import PlungerPumpCmd, PlungerPumpStatus
+from sealien_ctrlpilot_msgmanagement.msg import (
+    BuoyancyOilStatus,
+    PlungerPumpCmd,
+    PlungerPumpStatus,
+)
 from sealien_ctrlcore_web.core.base_module import WebModule
 
 PLUNGER_STATUS_TOPIC = "/PlungerPumpStatus"
 PLUNGER_CMD_TOPIC = "/obc/plunger_pump_cmd"
+BUOYANCY_OIL_TOPIC = "/BuoyancyOilStatus"
 PLUNGER_HARDWARE = "pwm3 PC8/PC9 · ESCON 50/5 ×2 · DigIN1 PWM @1kHz · Studio 常使能"
 PLUNGER_DUTY_OBC_MAX = 100
 PLUNGER_DUTY_ESC_MIN = 10
@@ -26,11 +32,24 @@ PLUNGER_RPM_MAX = 3240
 PLUNGER_RUN_DUTY_PCT = 50
 PLUNGER_STOP_DUTY_PCT = 0
 PLUNGER_WIRE_CH = 0
-PLUNGER_TRAVEL_MAX_MM = 176.29
+PLUNGER_OIL_EMPTY_MM = 0.0
+PLUNGER_OIL_FULL_MM = 176.29
+PLUNGER_TRAVEL_MAX_MM = PLUNGER_OIL_FULL_MM
+
+
+def plunger_oil_pct_from_mm(displacement_mm: float) -> float:
+    """与 MCU plunger_pump_oil_pct_from_mm 同一标定：空油 0 mm，满油 176.29 mm。"""
+    span = PLUNGER_OIL_FULL_MM - PLUNGER_OIL_EMPTY_MM
+    pct = (float(displacement_mm) - PLUNGER_OIL_EMPTY_MM) * (100.0 / span)
+    if pct < 0.0:
+        return 0.0
+    if pct > 100.0:
+        return 100.0
+    return pct
 
 
 def plunger_ch0_at_max(displacement_mm: Any) -> bool:
-    """CH0 ≥ 176.29 mm 时两路柱塞泵 PWM 禁止；另一侧行程未标定。"""
+    """CH0 ≥ 满油 176.29 mm 时两路柱塞泵 PWM 禁止。"""
     try:
         return float(displacement_mm) >= PLUNGER_TRAVEL_MAX_MM
     except (TypeError, ValueError):
@@ -47,6 +66,9 @@ class PlungerPumpModule(WebModule):
         self.cmd_pub_ = None
         self.latched_duty_ = [PLUNGER_STOP_DUTY_PCT, PLUNGER_STOP_DUTY_PCT]
         self.has_latch_ = False
+        self.oil_rx_count_ = 0
+        self.last_oil_mono_: Optional[float] = None
+        self.oil_latest_: Optional[Dict[str, Any]] = None
 
     @property
     def module_id(self) -> str:
@@ -54,7 +76,7 @@ class PlungerPumpModule(WebModule):
 
     @property
     def title(self) -> str:
-        return "拉线位移 / 柱塞泵"
+        return "浮力驱动"
 
     def register(self, node: Node) -> None:
         self.cmd_pub_ = node.create_publisher(PlungerPumpCmd, PLUNGER_CMD_TOPIC, 10)
@@ -62,6 +84,12 @@ class PlungerPumpModule(WebModule):
             PlungerPumpStatus,
             PLUNGER_STATUS_TOPIC,
             self._on_status,
+            qos_profile_sensor_data,
+        )
+        node.create_subscription(
+            BuoyancyOilStatus,
+            BUOYANCY_OIL_TOPIC,
+            self._on_oil,
             qos_profile_sensor_data,
         )
 
@@ -97,10 +125,41 @@ class PlungerPumpModule(WebModule):
             snapshot["cmd_tx_count"] = self.cmd_tx_count_
             self.latest_ = snapshot
 
+    def _on_oil(self, msg: BuoyancyOilStatus) -> None:
+        snapshot = {
+            "oil_topic": BUOYANCY_OIL_TOPIC,
+            "mavlink_oil_msg": "BUOYANCY_OIL_STATUS (id=31, 50Hz)",
+            "oil_timestamp_ms": int(msg.timestamp_ms),
+            "oil_pct": float(msg.oil_pct),
+            "oil_valid": int(msg.valid),
+        }
+        with self.lock_:
+            self.oil_rx_count_ += 1
+            self.last_oil_mono_ = time.monotonic()
+            snapshot["oil_rx_count"] = self.oil_rx_count_
+            self.oil_latest_ = snapshot
+
+    def _oil_fields(self) -> Dict[str, Any]:
+        if self.oil_latest_ is None:
+            return {
+                "oil_connected": False,
+                "oil_topic": BUOYANCY_OIL_TOPIC,
+                "oil_rx_count": 0,
+                "oil_empty_mm": PLUNGER_OIL_EMPTY_MM,
+                "oil_full_mm": PLUNGER_OIL_FULL_MM,
+            }
+        data = dict(self.oil_latest_)
+        data["oil_connected"] = True
+        data["oil_empty_mm"] = PLUNGER_OIL_EMPTY_MM
+        data["oil_full_mm"] = PLUNGER_OIL_FULL_MM
+        if self.last_oil_mono_ is not None:
+            data["oil_age_sec"] = round(time.monotonic() - self.last_oil_mono_, 3)
+        return data
+
     def get_snapshot(self) -> Dict[str, Any]:
         with self.lock_:
             if self.latest_ is None:
-                return {
+                data = {
                     "connected": False,
                     "message": f"waiting for {PLUNGER_STATUS_TOPIC}",
                     "rx_count": 0,
@@ -118,6 +177,8 @@ class PlungerPumpModule(WebModule):
                     "latched_duty_ch0": self.latched_duty_[0],
                     "latched_duty_ch1": self.latched_duty_[1],
                 }
+                data.update(self._oil_fields())
+                return data
             data = dict(self.latest_)
             data["connected"] = True
             data["run_duty_pct"] = PLUNGER_RUN_DUTY_PCT
@@ -128,14 +189,22 @@ class PlungerPumpModule(WebModule):
             data["latched_duty_ch1"] = self.latched_duty_[1]
             if self.last_rx_mono_ is not None:
                 data["age_sec"] = round(time.monotonic() - self.last_rx_mono_, 3)
+            data.update(self._oil_fields())
             return data
 
     def is_alive(self, now_sec: float, stale_sec: float) -> bool:
         _ = now_sec
         with self.lock_:
-            if self.last_rx_mono_ is None:
-                return False
-            return (time.monotonic() - self.last_rx_mono_) <= stale_sec
+            now = time.monotonic()
+            pump_ok = (
+                self.last_rx_mono_ is not None
+                and (now - self.last_rx_mono_) <= stale_sec
+            )
+            oil_ok = (
+                self.last_oil_mono_ is not None
+                and (now - self.last_oil_mono_) <= stale_sec
+            )
+            return pump_ok or oil_ok
 
     def _duty_in_range(self, duty_pct: int) -> bool:
         return 0 <= duty_pct <= PLUNGER_DUTY_OBC_MAX

@@ -101,7 +101,7 @@ function pumpDutySectionHtml(prefix, title) {
 
 export default {
   id: "plunger_pump",
-  title: "拉线位移 / 柱塞泵",
+  title: "浮力驱动",
 
   mount(root) {
     root.innerHTML = `
@@ -116,6 +116,7 @@ export default {
         <div class="card-grid">
           <div class="card"><div class="label">状态话题</div><div id="pp-status-topic" class="value mono-block">/PlungerPumpStatus</div></div>
           <div class="card"><div class="label">命令话题</div><div id="pp-cmd-topic" class="value mono-block">/obc/plunger_pump_cmd</div></div>
+          <div class="card"><div class="label">油量话题</div><div id="pp-oil-status-topic" class="value mono-block">/BuoyancyOilStatus</div></div>
           <div class="card wide"><div class="label">硬件 / 总线</div><div id="pp-hw" class="value mono-block">pwm3 PC8/PC9 · ESCON 50/5 ×2</div></div>
         </div>
         <p class="hint">
@@ -305,6 +306,7 @@ export default {
     setText("pp-age", data.age_sec != null ? Number(data.age_sec).toFixed(3) : "—");
     setText("pp-status-topic", data.status_topic ?? "/PlungerPumpStatus");
     setText("pp-cmd-topic", data.cmd_topic ?? "/obc/plunger_pump_cmd");
+    setText("pp-oil-status-topic", data.oil_topic ?? "/BuoyancyOilStatus");
     setText("pp-hw", data.hardware ?? "pwm3 PC8/PC9 · ESCON 50/5 ×2");
     setText("pp-ts", data.timestamp_ms != null ? String(data.timestamp_ms) : "—");
 

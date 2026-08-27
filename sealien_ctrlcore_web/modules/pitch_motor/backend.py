@@ -18,10 +18,13 @@ PITCH_CMD_TOPIC = "/obc/pitch_cmd"
 MCU_RPM_MIN = 150
 MCU_RPM_MAX = 3000
 
-PITCH_ZERO_MM = 45.0
+PITCH_TRAVEL_MIN_MM = 45.0
 PITCH_TRAVEL_MAX_MM = 125.0
-PITCH_S_MAX_MM = PITCH_TRAVEL_MAX_MM - PITCH_ZERO_MM
-PITCH_MM_SCALE = 10.0
+PITCH_ZERO_MM = (PITCH_TRAVEL_MIN_MM + PITCH_TRAVEL_MAX_MM) * 0.5
+PITCH_PCT_MIN = -100.0
+PITCH_PCT_MAX = 100.0
+PITCH_CMD_PCT_SCALE = 10.0
+PITCH_CMD_PCT_OFFSET = 1000.0
 
 RUN_CMD_STOP = 0
 RUN_CMD_FWD = 1
@@ -44,8 +47,46 @@ RUN_LABELS = {
     0: "停止",
     1: "正转",
     2: "反转",
-    3: "相对零位位移",
+    3: "位置环百分比",
 }
+
+
+def pitch_clamp_pct(pct: float) -> float:
+    if pct < PITCH_PCT_MIN:
+        return PITCH_PCT_MIN
+    if pct > PITCH_PCT_MAX:
+        return PITCH_PCT_MAX
+    return pct
+
+
+def pitch_mm_to_pct(mm: float, min_mm: float = PITCH_TRAVEL_MIN_MM,
+                    max_mm: float = PITCH_TRAVEL_MAX_MM) -> float:
+    span = max_mm - min_mm
+    if span <= 0.0:
+        return 0.0
+    mid = (min_mm + max_mm) * 0.5
+    return pitch_clamp_pct((mm - mid) * 200.0 / span)
+
+
+def pitch_pct_to_mm(pct: float, min_mm: float = PITCH_TRAVEL_MIN_MM,
+                    max_mm: float = PITCH_TRAVEL_MAX_MM) -> float:
+    span = max_mm - min_mm
+    if span <= 0.0:
+        return min_mm
+    pct = pitch_clamp_pct(pct)
+    mid = (min_mm + max_mm) * 0.5
+    return mid + pct * span * 0.005
+
+
+def pitch_encode_cmd_rpm(pct: float) -> int:
+    pct = pitch_clamp_pct(pct)
+    return int(round(pct * PITCH_CMD_PCT_SCALE + PITCH_CMD_PCT_OFFSET))
+
+
+def pitch_est_pair(target_pct: float, actual_pct: float) -> Tuple[float, float]:
+    target_mm = round(pitch_pct_to_mm(float(target_pct)), 2)
+    actual_mm = round(pitch_pct_to_mm(float(actual_pct)), 2)
+    return (target_mm, actual_mm)
 
 
 class PitchMotorModule(WebModule):
@@ -77,6 +118,9 @@ class PitchMotorModule(WebModule):
     def _on_status(self, msg: PitchMotorStatus) -> None:
         fault = int(msg.fault)
         run_state = int(msg.run_state)
+        target_pct = round(float(msg.target_pct), 1)
+        actual_pct = round(float(msg.actual_pct), 1)
+        target_mm, actual_mm = pitch_est_pair(target_pct, actual_pct)
         snapshot = {
             "status_topic": PITCH_STATUS_TOPIC,
             "cmd_topic": PITCH_CMD_TOPIC,
@@ -94,10 +138,13 @@ class PitchMotorModule(WebModule):
             "bus_voltage_v": round(float(msg.bus_voltage_x10) * 0.1, 1),
             "bus_current_a": round(float(msg.bus_current_x100) * 0.01, 2),
             "cpu_temp_c": int(msg.cpu_temp_c),
+            "target_pct": target_pct,
+            "actual_pct": actual_pct,
+            "target_mm": target_mm,
+            "actual_mm": actual_mm,
             "mcu_rpm_limit": [MCU_RPM_MIN, MCU_RPM_MAX],
-            "pitch_zero_mm": PITCH_ZERO_MM,
+            "pitch_travel_min_mm": PITCH_TRAVEL_MIN_MM,
             "pitch_travel_max_mm": PITCH_TRAVEL_MAX_MM,
-            "pitch_s_max_mm": PITCH_S_MAX_MM,
             "stamp_sec": float(msg.header.stamp.sec),
             "stamp_nanosec": int(msg.header.stamp.nanosec),
             "frame_id": str(msg.header.frame_id),
@@ -121,9 +168,8 @@ class PitchMotorModule(WebModule):
                     "cmd_topic": PITCH_CMD_TOPIC,
                     "hardware": "uart4 RS485 · BLD005-LR",
                     "mcu_rpm_limit": [MCU_RPM_MIN, MCU_RPM_MAX],
-                    "pitch_zero_mm": PITCH_ZERO_MM,
+                    "pitch_travel_min_mm": PITCH_TRAVEL_MIN_MM,
                     "pitch_travel_max_mm": PITCH_TRAVEL_MAX_MM,
-                    "pitch_s_max_mm": PITCH_S_MAX_MM,
                 }
             data = dict(self.latest_)
             data["connected"] = True
@@ -153,24 +199,18 @@ class PitchMotorModule(WebModule):
             return 400, {"ok": False, "error": "run_cmd must be 0/1/2/3"}
 
         speed_rpm = MCU_RPM_MIN
-        s_mm = None
+        target_pct = None
         target_mm = None
 
         if run_cmd == RUN_CMD_DISPLACE_ZERO:
             try:
-                if "displacement_mm" in body:
-                    s_mm = float(body.get("displacement_mm"))
-                else:
-                    s_mm = float(body.get("speed_rpm", 0)) / PITCH_MM_SCALE
+                target_pct = float(body.get("target_pct"))
             except (TypeError, ValueError):
-                return 400, {"ok": False, "error": "invalid displacement_mm"}
+                return 400, {"ok": False, "error": "invalid target_pct"}
 
-            if s_mm < 0.0:
-                s_mm = 0.0
-            if s_mm > PITCH_S_MAX_MM:
-                s_mm = PITCH_S_MAX_MM
-            target_mm = PITCH_ZERO_MM + s_mm
-            speed_rpm = int(round(s_mm * PITCH_MM_SCALE))
+            target_pct = pitch_clamp_pct(target_pct)
+            target_mm = pitch_pct_to_mm(target_pct)
+            speed_rpm = pitch_encode_cmd_rpm(target_pct)
         else:
             try:
                 speed_rpm = int(body.get("speed_rpm", MCU_RPM_MIN))
@@ -180,6 +220,7 @@ class PitchMotorModule(WebModule):
         msg = PitchMotorCmd()
         msg.speed_rpm = speed_rpm
         msg.run_cmd = run_cmd
+        msg.target_pct = float(target_pct) if target_pct is not None else 0.0
         self.cmd_pub_.publish(msg)
 
         with self.lock_:
@@ -192,10 +233,14 @@ class PitchMotorModule(WebModule):
             "run_cmd": run_cmd,
             "run_label": RUN_LABELS.get(run_cmd, str(run_cmd)),
             "cmd_tx_count": count,
-            "note": "OBC 透传；零位 45 mm，往前朝 125 mm；软限位始终开启",
+            "note": (
+                f"cmd=3 为 ±100%；零位 0%={PITCH_ZERO_MM:.0f} mm；"
+                f"{PITCH_TRAVEL_MIN_MM:.0f} mm=-100%、{PITCH_TRAVEL_MAX_MM:.0f} mm=+100%；"
+                "拉线原始 mm 仍走 /WireDisplacementStatus"
+            ),
         }
-        if s_mm is not None:
-            resp["displacement_mm"] = round(s_mm, 2)
+        if target_pct is not None:
+            resp["target_pct"] = round(target_pct, 1)
         if target_mm is not None:
             resp["target_mm"] = round(target_mm, 2)
         return 200, resp

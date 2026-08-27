@@ -84,7 +84,7 @@ export default {
         <div class="card-grid">
           <div class="card"><div class="label">状态话题</div><div id="thr-status-topic" class="value mono-block">/ThrusterStatus</div></div>
           <div class="card"><div class="label">命令话题</div><div id="thr-cmd-topic" class="value mono-block">/thruster_command</div></div>
-          <div class="card"><div class="label">锁话题</div><div id="thr-lock-topic" class="value mono-block">/obc/thruster_lock</div></div>
+          <div class="card"><div class="label">锁字段</div><div id="thr-lock-field" class="value mono-block">thruster_unlocked</div></div>
         </div>
         <div class="card-grid">
           <div class="card wide"><div class="label">硬件 / 总线</div><div id="thr-link-hw" class="value mono-block">fdcan2 · TD10A · main_out</div></div>
@@ -92,9 +92,9 @@ export default {
         <p class="hint">
           状态链：MCU MCN <code>thruster</code> / td10a → MAVLink <code>THRUSTER_STATUS (id=2, 20Hz)</code>
           → ROS <code>/ThrusterStatus</code>。
-          命令链：开启周期后 Web 保活 <code>/thruster_command</code> → <code>THRUSTER_CMD (id=10)</code>；
-          <code>/obc/thruster_lock</code> → <code>THRUSTER_LOCK (id=11)</code> 只动推进器动力锁。
-          AUV 仅 index=0 有效，其余填 0。
+          命令链：开启周期后 Web 保活 <code>/thruster_command</code>（<code>thrusts</code> + <code>thruster_unlocked</code>）
+          → <code>THRUSTER_CMD (id=10)</code> 和 <code>THRUSTER_LOCK (id=11)</code>。
+          AUV 仅 index=0 有效，其余填 1500。
         </p>
       </section>
 
@@ -116,9 +116,9 @@ export default {
             <div id="thr-ros-stamp" class="value mono-block">—</div>
           </div>
           <div class="card">
-            <div class="label">最近目标 PWM[0]</div>
+            <div class="label">最近目标 thrusts[0]</div>
             <div id="thr-last-cmd" class="value mono-block">—</div>
-            <p class="hint">Web 调试目标 speed[0]，1500=中立</p>
+            <p class="hint">Web 调试目标，1500=中位</p>
           </div>
         </div>
       </section>
@@ -178,13 +178,14 @@ export default {
       <section class="panel">
         <h2>THRUSTER_CMD 推力调试</h2>
         <p class="hint">
-          <code>speed[0]</code> PWM 微秒值：1000~2000，中立 1500。
-          MCU 映射 TC 百分比：percent = (speed - 1500) × 100 / 500，限幅 ±100%。
-          <strong>仅「周期发送」开启后</strong>后端才持续发 <code>/thruster_command</code>；
+          <code>thrusts[0]</code>：1000~2000，中位 1500。
+          MCU 映射 TC 百分比：percent = (thrusts[0] - 1500) × 100 / 500，限幅 ±100%。
+          开周期会带 <code>thruster_unlocked=true</code>。
+          <strong>仅「周期发送」开启后</strong>才持续发 <code>/thruster_command</code>；
           「停止周期」后真正停发，可验证 MCU 断流看门狗。
         </p>
         <div class="control-row">
-          <label class="label-inline" for="thr-speed">speed[0] PWM</label>
+          <label class="label-inline" for="thr-speed">thrusts[0]</label>
           <input id="thr-speed" class="thr-speed-range" type="range" min="${PWM_MIN}" max="${PWM_MAX}" step="1" value="${PWM_NEUTRAL}">
           <input id="thr-speed-num" class="thr-speed-num" type="number" min="${PWM_MIN}" max="${PWM_MAX}" step="1" value="${PWM_NEUTRAL}" title="直接输入 1000~2000">
           <span id="thr-percent-val" class="hint">0% · TC 0%</span>
@@ -199,23 +200,25 @@ export default {
       <section class="panel">
         <h2>THRUSTER_LOCK 动力锁</h2>
         <p class="hint">
-          仅控制推进器：<code>lock=0</code> 解锁后才能写推力；<code>lock=1</code> 上锁后忽略 TC 并归零。
-          不联动阀控 / board_ctrl。
+          走同一条 <code>/thruster_command</code>：<code>thruster_unlocked=true</code> 解锁后才能写推力；
+          <code>false</code> 上锁后忽略 TC 并归零。不联动阀控 / board_ctrl。
+          未开周期时点解锁，网关约 2.5 s 无油门会 failsafe 再上锁。
         </p>
         <div class="control-row">
-          <button id="thr-unlock" type="button">解锁 (lock=0)</button>
-          <button id="thr-lock-btn" type="button">上锁 (lock=1)</button>
+          <button id="thr-unlock" type="button">解锁 (thruster_unlocked=true)</button>
+          <button id="thr-lock-btn" type="button">上锁 (thruster_unlocked=false)</button>
           <span id="thr-lock-sync" class="hint">状态：等待 /ThrusterStatus</span>
         </div>
-        <div id="thr-lock-result" class="hint">POST /api/modules/thruster/lock → /obc/thruster_lock；按钮高亮跟随 MCU 回报</div>
+        <div id="thr-lock-result" class="hint">POST /api/modules/thruster/lock → /thruster_command.thruster_unlocked；按钮高亮跟随 MCU 回报</div>
       </section>
 
       <section class="panel">
         <h2>协议字段对照</h2>
         <p class="mono-block">
           THRUSTER_STATUS (id=2): timestamp_ms, speed[12], power[12], temp[12], status[12], fault[12], lock, fault_raw[12]（MAVLink 2 扩展）<br>
-          THRUSTER_CMD (id=10): speed[8] PWM μs（Web 用 speed[0]）<br>
-          THRUSTER_LOCK (id=11): lock (0/1)<br>
+          /thruster_command: thrusts[16] 油门 μs + thruster_unlocked<br>
+          THRUSTER_CMD (id=10): thrusts[0..7]（Web 用 thrusts[0]）<br>
+          THRUSTER_LOCK (id=11): 由 thruster_unlocked 生成（true=解锁 / false=上锁）<br>
           TD10A CAN: TC/QV/QC/QT/EF/MQ · 无 QP 电压 · power 字段上报电流 A · Node 0x01 · fdcan2 500k
         </p>
       </section>
@@ -306,7 +309,7 @@ export default {
         const { status, data } = await postModule("thruster", "lock", { lock });
         if (data.ok) {
           resultEl.textContent =
-            `已请求 lock=${data.lock}（累计 ${data.lock_tx_count}）；以状态卡 / 按钮高亮为准，MCU 拒绝解锁时状态会保持上锁`;
+            `已请求 thruster_unlocked=${data.thruster_unlocked}（累计 ${data.lock_tx_count}）；以状态卡 / 按钮高亮为准，MCU 拒绝解锁时状态会保持上锁`;
           syncLockButtons(this._lastLocked, lock);
         } else {
           this._pendingLock = null;
@@ -329,7 +332,7 @@ export default {
           syncSpeedControls(data.speed);
           setCmdResult(
             [
-              `周期已开启 PWM=${data.speed} (${data.percent >= 0 ? "+" : ""}${data.percent}%)`,
+              `周期已开启 thrusts[0]=${data.speed} (${data.percent >= 0 ? "+" : ""}${data.percent}%)`,
               data.note || "",
             ].join(" · "),
           );
@@ -375,7 +378,7 @@ export default {
         });
         if (data.ok) {
           setCmdResult(
-            `周期中目标 PWM=${data.speed} (${data.percent >= 0 ? "+" : ""}${data.percent}%)`,
+            `周期中目标 thrusts[0]=${data.speed} (${data.percent >= 0 ? "+" : ""}${data.percent}%)`,
           );
         } else {
           setCmdResult(`更新失败 (${status}): ${data.error || "unknown"}`);
@@ -396,7 +399,7 @@ export default {
       try {
         const { status, data } = await postModule("thruster", "neutral", {});
         if (data.ok) {
-          setCmdResult(data.note || `目标归中 PWM=${data.speed}`);
+          setCmdResult(data.note || `目标归中 thrusts[0]=${data.speed}`);
         } else {
           setCmdResult(`失败 (${status}): ${data.error || "unknown"}`);
         }
@@ -450,7 +453,7 @@ export default {
     setText("thr-age", data.age_sec != null ? fmt(data.age_sec, 3) : "—");
     setText("thr-status-topic", data.status_topic ?? "/ThrusterStatus");
     setText("thr-cmd-topic", data.cmd_topic ?? "/thruster_command");
-    setText("thr-lock-topic", data.lock_topic ?? "/obc/thruster_lock");
+    setText("thr-lock-field", data.lock_field ?? "thruster_unlocked");
     setText("thr-link-hw", data.hardware ?? "fdcan2 · TD10A · main_out · Node 0x01 @500k");
 
     const streamBtn = document.getElementById("thr-stream-toggle");
