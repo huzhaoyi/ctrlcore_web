@@ -3,27 +3,64 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Sealien CtrlCore AUV调试台</title>
+  <title>SEALIEN · AUV 监控台</title>
+  <link rel="icon" href="/assets/favicon.png" type="image/png">
+  <link rel="stylesheet" href="/core/tokens.css">
   <link rel="stylesheet" href="/style.css">
   <link rel="stylesheet" href="/core/module_health.css">
 </head>
 <body>
   <header class="top-bar">
-    <div>
-      <h1>Sealien CtrlCore AUV调试台</h1>
-      <p class="subtitle">MCU 采集上发数据查看 · 模块化面板</p>
+    <div class="top-brand">
+      <img
+        class="top-brand-logo"
+        src="/assets/sealien-logo.png"
+        alt="SEALIEN"
+        width="168"
+        height="36"
+      >
+      <div class="top-brand-copy">
+        <h1>AUV 监控台</h1>
+        <p class="subtitle">在线监测 · 模块化调试</p>
+      </div>
     </div>
+    <nav class="workspace-tabs" role="tablist" aria-label="工作区">
+      <button
+        id="tab-monitor"
+        type="button"
+        class="workspace-tab active"
+        role="tab"
+        aria-selected="true"
+        aria-controls="workspace-monitor"
+      >监测</button>
+      <button
+        id="tab-debug"
+        type="button"
+        class="workspace-tab"
+        role="tab"
+        aria-selected="false"
+        aria-controls="workspace-debug"
+      >调试</button>
+    </nav>
     <div class="top-right">
       <div id="server-time" class="server-time">--</div>
       <div id="link-badge" class="badge offline">未连接</div>
     </div>
   </header>
 
-  <div class="layout">
-    <nav id="module-nav" class="side-nav"></nav>
-    <main id="panel-root" class="panel-root">
+  <div id="workspace-monitor" class="workspace workspace-active">
+    <main id="monitor-root" class="monitor-root">
       <p class="hint">加载中…</p>
     </main>
+  </div>
+
+  <div id="workspace-debug" class="workspace">
+    <div class="layout">
+      <nav id="module-nav" class="side-nav" aria-label="调试模块"></nav>
+      <main id="panel-root" class="panel-root">
+        <p class="hint">加载中…</p>
+      </main>
+    </div>
   </div>
 
   <script type="module" src="/core/shell.js"></script>

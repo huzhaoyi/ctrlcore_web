@@ -76,7 +76,7 @@ test("maps the actual SHZR04 snapshot fields", () => {
   assert.equal(view.longitude, "+113.525280");
   assert.equal(view.velocity_east, "-0.500");
   assert.equal(view.dvl_bottom_right, "-0.800");
-  assert.equal(view.dvl_update_text, "更新正常 · 距今 0.23s");
+  assert.equal(view.dvl_update_text, "更新正常 · 距今 0.23s · 累计 8 次");
   assert.equal(view.dvl_update_state, "recent");
   assert.equal(view.dvl_update_count, "8");
   assert.equal(view.dvl_valid_text, "7 对流");
@@ -155,6 +155,8 @@ test("DVL update latch maps waiting, recent, timeout, and offline", () => {
         dvl_update_latch_state: "timeout",
         dvl_update_age_sec: 2.1,
         dvl_update_count: 3,
+        dvl_valid_flags: 1,
+        dvl_valid_ok: true,
       },
       {
         alive: false,
@@ -168,8 +170,8 @@ test("DVL update latch maps waiting, recent, timeout, and offline", () => {
     }),
     [
       ["等待首次更新", "waiting", false],
-      ["更新正常 · 距今 0.23s", "recent", true],
-      ["更新超时 · 距今 2.10s", "timeout", false],
+      ["更新正常 · 距今 0.23s · 累计 3 次", "recent", true],
+      ["低频更新 · 末次脉冲 2.10s 前 · 累计 3 次", "slow", true],
       ["惯导离线", "offline", false],
     ],
   );

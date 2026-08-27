@@ -1,3 +1,8 @@
+import {
+  assessDvlModeDisplay,
+  assessDvlUpdateDisplay,
+} from "./dvl_health.mjs";
+
 const ALIGNMENT_LABELS = new Map([
   [0, "0 待机 (Standby)"],
   [1, "1 粗对准 (Coarse alignment)"],
@@ -40,61 +45,6 @@ function stampText(sec, nanosec) {
 
   const fraction = Math.trunc(nanosecNumber).toString().padStart(9, "0");
   return `${Math.trunc(secNumber)}.${fraction}`;
-}
-
-function dvlUpdateStatus(data) {
-  if (data?.alive === false) {
-    return { text: "惯导离线", state: "offline", ok: false };
-  }
-
-  const state = data?.dvl_update_latch_state;
-  if (!isPresent(state)) {
-    return { text: "--", state: "unknown", ok: false };
-  }
-
-  if (state === "waiting") {
-    return { text: "等待首次更新", state: "waiting", ok: false };
-  }
-
-  const ageSec = Number(data?.dvl_update_age_sec);
-  if (!Number.isFinite(ageSec) || ageSec < 0.0) {
-    return { text: "更新状态不可用", state: "unknown", ok: false };
-  }
-
-  if (state === "recent") {
-    return {
-      text: `更新正常 · 距今 ${ageSec.toFixed(2)}s`,
-      state: "recent",
-      ok: true,
-    };
-  }
-  if (state === "timeout") {
-    return {
-      text: `更新超时 · 距今 ${ageSec.toFixed(2)}s`,
-      state: "timeout",
-      ok: false,
-    };
-  }
-
-  return { text: `未知状态 (${state})`, state: "unknown", ok: false };
-}
-
-function dvlModeState(value) {
-  if (!isPresent(value) || !Number.isFinite(Number(value))) {
-    return { text: "--", state: "unknown", ok: false };
-  }
-
-  const code = Number(value);
-  if (code === 0) {
-    return { text: "0 无效", state: "invalid", ok: false };
-  }
-  if (code === 1) {
-    return { text: "1 对底", state: "valid", ok: true };
-  }
-  if (code === 7) {
-    return { text: "7 对流", state: "valid", ok: true };
-  }
-  return { text: `未知 (${code})`, state: "unknown", ok: false };
 }
 
 function clockText(totalSec) {
@@ -182,8 +132,8 @@ export function buildAlignmentRequest(latitude, longitude, altitude) {
 
 export function buildElb105ViewModel(data = {}) {
   const alignmentStatus = Number(data?.alignment_status);
-  const dvlUpdate = dvlUpdateStatus(data);
-  const dvlMode = dvlModeState(data?.dvl_valid_flags);
+  const dvlUpdate = assessDvlUpdateDisplay(data);
+  const dvlMode = assessDvlModeDisplay(data);
   const countdown = countdownText(data);
   const connected = Boolean(data?.connected);
 

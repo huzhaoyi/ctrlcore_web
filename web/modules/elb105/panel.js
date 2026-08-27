@@ -68,7 +68,7 @@ function setSemanticStatus(id, state, text) {
   }
   element.textContent = text;
   element.classList.remove("status-ok", "status-bad", "status-warn");
-  const className = state === "valid" || state === "complete" || state === "recent"
+  const className = state === "valid" || state === "complete" || state === "recent" || state === "slow"
     ? "status-ok"
     : state === "invalid" || state === "offline" || state === "timeout"
       ? "status-bad"

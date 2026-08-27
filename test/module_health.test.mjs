@@ -36,7 +36,7 @@ test("shell clears all module health on snapshot API failure", async () => {
   );
   assert.match(source, /this\._updateModuleHealth\(snapshot\)/);
   assert.match(source, /catch \(err\)[\s\S]*markAllModulesOffline/);
-  assert.match(source, /catch \(err\)[\s\S]*this\._updateActivePanel/);
+  assert.match(source, /catch \(err\)[\s\S]*this\._updateActiveView/);
 });
 
 test("offline snapshot preserves values but marks every known module offline", () => {
