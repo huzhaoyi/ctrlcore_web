@@ -803,6 +803,129 @@ button.is-active-warn {
   margin-top: 6px;
 }
 
+.gs-zero-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(8, 12, 18, 0.72);
+  backdrop-filter: blur(2px);
+}
+
+.gs-zero-modal-overlay[hidden] {
+  display: none;
+}
+
+.gs-zero-modal {
+  width: min(520px, 100%);
+  max-height: calc(100vh - 48px);
+  overflow: auto;
+  padding: 20px 22px;
+  border-radius: var(--radius-lg);
+  border: 1px solid rgba(245, 165, 36, 0.45);
+  background: var(--surface-raised);
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.45);
+}
+
+.gs-zero-modal h3 {
+  margin: 0 0 12px;
+  color: var(--warn);
+}
+
+.gs-zero-modal-warn {
+  margin: 0 0 14px;
+  line-height: 1.55;
+  color: var(--text);
+}
+
+.gs-zero-modal-meta {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 16px;
+  margin: 0 0 14px;
+  padding: 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: rgba(0, 0, 0, 0.18);
+}
+
+.gs-zero-modal-meta div {
+  min-width: 0;
+}
+
+.gs-zero-modal-meta dt {
+  margin: 0 0 4px;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.gs-zero-modal-meta dd {
+  margin: 0;
+  word-break: break-word;
+}
+
+.gs-zero-modal-steps {
+  margin: 0 0 14px;
+  padding-left: 1.2rem;
+}
+
+.gs-zero-modal-offline-warn {
+  margin: 0 0 14px;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid rgba(245, 165, 36, 0.45);
+  background: rgba(245, 165, 36, 0.1);
+  color: var(--warn);
+  line-height: 1.45;
+}
+
+.gs-zero-modal-offline-warn[hidden] {
+  display: none;
+}
+
+.gs-zero-modal-check {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  margin-bottom: 12px;
+  line-height: 1.45;
+  cursor: pointer;
+}
+
+.gs-zero-modal-check input {
+  margin-top: 3px;
+  flex: 0 0 auto;
+}
+
+.gs-zero-modal-actions {
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.gs-zero-modal-confirm:not(:disabled) {
+  border-color: rgba(243, 18, 96, 0.55);
+  background: rgba(243, 18, 96, 0.16);
+  color: #ffd6e0;
+}
+
+.gs-zero-modal-confirm:not(:disabled):hover {
+  background: rgba(243, 18, 96, 0.28);
+}
+
+.gs-ch-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.gs-ch-actions button {
+  padding: 4px 10px;
+  font-size: 0.82rem;
+}
+
 @media (max-width: 800px) {
   .top-bar {
     align-items: flex-start;

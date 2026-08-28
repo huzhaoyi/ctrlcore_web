@@ -3,6 +3,8 @@ import { postModule } from "../../core/api.js";
 const GS_CHANNEL_COUNT = 4;
 const GS_CMD_TYPE_ANGLE = 0;
 const GS_CMD_TYPE_SPEED = 1;
+const GS_CMD_TYPE_STOP = 2;
+const GS_CMD_TYPE_SET_ZERO = 3;
 
 function setText(id, text) {
   const el = document.getElementById(id);
@@ -56,6 +58,10 @@ function channelRowsHtml() {
         <td id="gs-ch-${index}-rev" class="mono">—</td>
         <td id="gs-ch-${index}-res" class="mono">—</td>
         <td id="gs-ch-${index}-res-label" class="hint">—</td>
+        <td class="gs-ch-actions">
+          <button type="button" class="gs-ch-stop" data-index="${index}">停止</button>
+          <button type="button" class="gs-ch-zero" data-index="${index}">设零点</button>
+        </td>
       </tr>
     `);
   }
@@ -65,7 +71,8 @@ function channelRowsHtml() {
 function channelOptionsHtml() {
   const options = [];
   for (let index = 0; index < GS_CHANNEL_COUNT; index += 1) {
-    options.push(`<option value="${index}">[${index}] 舵机 ${index}</option>`);
+    const node = (index + 1).toString(16).toUpperCase().padStart(2, "0");
+    options.push(`<option value="${index}">[${index}] Node 0x${node}</option>`);
   }
   return options.join("");
 }
@@ -73,6 +80,43 @@ function channelOptionsHtml() {
 function numInput(id, value, step) {
   return `<input id="${id}" type="number" step="${step}" value="${value}"
     style="width:100%;padding:8px;border-radius:8px;border:1px solid var(--border);background:#0f1419;color:var(--text)">`;
+}
+
+function setZeroModalHtml() {
+  return `
+    <div id="gs-zero-modal" class="gs-zero-modal-overlay" hidden aria-hidden="true">
+      <div class="gs-zero-modal" role="dialog" aria-labelledby="gs-zero-modal-title" aria-modal="true">
+        <h3 id="gs-zero-modal-title">设零点确认</h3>
+        <p class="gs-zero-modal-warn">
+          此操作将通过 CAN 下发 <code>C4 01</code>，把<strong>当前机械位置</strong>写入舵机零点，
+          后续角度反馈将以此为 0°。误操作会导致零位偏移，且<strong>不可通过网页撤销</strong>。
+        </p>
+        <dl class="gs-zero-modal-meta">
+          <div><dt>index</dt><dd id="gs-zero-modal-index" class="mono">—</dd></div>
+          <div><dt>CAN</dt><dd id="gs-zero-modal-can" class="mono">—</dd></div>
+          <div><dt>当前 angle_deg</dt><dd id="gs-zero-modal-angle" class="mono">—</dd></div>
+          <div><dt>在线</dt><dd id="gs-zero-modal-online">—</dd></div>
+        </dl>
+        <ol class="gs-zero-modal-steps hint">
+          <li>先对该路下发<strong>停止</strong>，确认舵机已停在目标零位且不再运动。</li>
+          <li>勾选下方确认项，再点击<strong>确认设零点</strong>。</li>
+        </ol>
+        <p id="gs-zero-modal-offline-warn" class="gs-zero-modal-offline-warn" hidden>
+          该路当前离线或未接入，设零点命令可能无法到达舵机；请确认接线与在线状态后再继续。
+        </p>
+        <label class="gs-zero-modal-check">
+          <input id="gs-zero-ack" type="checkbox">
+          <span>我已确认舵机停在目标零位，且理解此操作会永久改变该路零点。</span>
+        </label>
+        <div class="gs-zero-modal-actions control-row">
+          <button id="gs-zero-cancel" type="button">取消</button>
+          <button id="gs-zero-confirm" type="button" class="gs-zero-modal-confirm" disabled>
+            确认设零点
+          </button>
+        </div>
+      </div>
+    </div>
+  `;
 }
 
 function setCmdTypeView(cmdType) {
@@ -115,9 +159,10 @@ export default {
           → OBC bridge → ROS <code>/GsStatus</code>。
         </p>
         <p class="hint">
-          运行时命令：<code>/obc/gs_cmd</code> → GS_CMD（0=角度 / 1=正反转速）。
+          运行时命令：<code>/obc/gs_cmd</code> → GS_CMD（0=角度 / 1=正反转速 / 2=停止 / 3=设零点）。
           四路可独立在线；未接入的路显示离线。
-          零点 / ID / 波特率 / 限位等产线配置走 MCU，网页不提供。
+          程序 <strong>index 0..3</strong> 对应 CAN <strong>Node 0x01..0x04</strong>（如 4 号舵机 = index 3）。
+          状态表每路可单独<strong>停止</strong>（C2）或<strong>设零点</strong>（C4 01）；限位 / ID / 波特率等仍走 MCU 产线 API。
         </p>
       </section>
 
@@ -169,17 +214,20 @@ export default {
                 <th>rev (°/s)</th>
                 <th>res</th>
                 <th>故障解析</th>
+                <th>操作</th>
               </tr>
             </thead>
-            <tbody>
+            <tbody id="gs-channel-tbody">
               ${channelRowsHtml()}
             </tbody>
           </table>
         </div>
         <p class="hint">
-          <strong>在线</strong>：该路有应答。未接的路保持离线，不影响其它路上报。
-          <strong>angle_deg</strong>：当前角度。
-          <strong>fwd / rev</strong>：正反转速反馈。
+          <strong>在线</strong>：该路 A0 有应答（<code>step=1</code>）。未接的路保持离线，不影响其它路上报。
+          <strong>angle_deg</strong>：MCU 由 A0 圈数 + 单圈角解析（运行中 byte[1]=0x80 时方向沿用缓存）。
+          <strong>fwd / rev</strong>：CB01/CB02 配置转速反馈；在线后 MCU 自动 setup 写入默认 20 °/s，未上报前显示「—」。
+          <strong>res</strong>：A0 状态字；仅 <code>res &amp; 0x737F ≠ 0</code> 计为报警，<code>0x8000</code> 单独为终端电阻状态。
+          <strong>停止</strong>：下发 GS_CMD cmd_type=2（C2 停机）。<strong>设零点</strong>：cmd_type=3（C4 01），将当前机械位置写入零点，操作前请确认舵机已到位。
           离线时角度和故障不显示实测值。
         </p>
       </section>
@@ -211,24 +259,171 @@ export default {
           <div class="card" id="gs-cmd-fwd-card" style="display:none">
             <div class="label">forward_speed (°/s)</div>
             ${numInput("gs-fwd-input", "20", "1")}
-            <p class="hint">正转 CB01，MCU 范围 6~45</p>
+            <p class="hint">正转 CB01，最低 6 °/s，额定 20，建议不超过额定</p>
           </div>
           <div class="card" id="gs-cmd-rev-card" style="display:none">
             <div class="label">reverse_speed (°/s)</div>
             ${numInput("gs-rev-input", "20", "1")}
-            <p class="hint">反转 CB02，MCU 范围 6~45</p>
+            <p class="hint">反转 CB02，最低 6 °/s，额定 20，建议不超过额定</p>
           </div>
         </div>
         <div class="control-row" style="margin-top:12px">
           <button id="gs-send" type="button">发送一次 GS_CMD</button>
         </div>
-        <div id="gs-cmd-result" class="hint">POST /api/modules/gs/cmd → /obc/gs_cmd</div>
+        <div id="gs-cmd-result" class="hint">POST /api/modules/gs/cmd|stop|set_zero → /obc/gs_cmd</div>
       </section>
+      ${setZeroModalHtml()}
     `;
+
+    this._channels = [];
+    this._setZeroModalResolver = null;
+
+    this._closeSetZeroModal = (confirmed) => {
+      const modal = document.getElementById("gs-zero-modal");
+      if (modal) {
+        modal.hidden = true;
+        modal.setAttribute("aria-hidden", "true");
+      }
+      const resolver = this._setZeroModalResolver;
+      this._setZeroModalResolver = null;
+      if (resolver) {
+        resolver(Boolean(confirmed));
+      }
+    };
+
+    this._updateSetZeroModalConfirm = () => {
+      const ackEl = document.getElementById("gs-zero-ack");
+      const confirmBtn = document.getElementById("gs-zero-confirm");
+      if (confirmBtn) {
+        confirmBtn.disabled = !Boolean(ackEl?.checked);
+      }
+    };
+
+    this._requestSetZeroConfirm = (index) => {
+      return new Promise((resolve) => {
+        const modal = document.getElementById("gs-zero-modal");
+        const confirmBtn = document.getElementById("gs-zero-confirm");
+        const ackEl = document.getElementById("gs-zero-ack");
+        if (!modal || !confirmBtn || !ackEl) {
+          resolve(false);
+          return;
+        }
+
+        const ch = this._channels?.[index];
+        const node = (index + 1).toString(16).toUpperCase().padStart(2, "0");
+        const online = Boolean(ch?.online);
+        const angleText = online ? fmtSigned(ch.angle_deg, 2) : "—（离线或未接入）";
+
+        setText("gs-zero-modal-index", `[${index}]`);
+        setText("gs-zero-modal-can", ch
+          ? `${ch.hal_name} · Node ${ch.can_node}`
+          : `Node 0x${node}`);
+        setText("gs-zero-modal-angle", angleText);
+        setText("gs-zero-modal-online", online ? "在线" : "离线");
+
+        const warnEl = document.getElementById("gs-zero-modal-offline-warn");
+        if (warnEl) {
+          warnEl.hidden = online;
+        }
+
+        confirmBtn.disabled = true;
+        ackEl.checked = false;
+
+        this._setZeroModalResolver = resolve;
+        modal.hidden = false;
+        modal.setAttribute("aria-hidden", "false");
+        ackEl.focus();
+      });
+    };
+
+    this._onSetZeroModalKeydown = (event) => {
+      const modal = document.getElementById("gs-zero-modal");
+      if (!modal || modal.hidden) {
+        return;
+      }
+      if (event.key === "Escape") {
+        event.preventDefault();
+        this._closeSetZeroModal(false);
+      }
+    };
+
+    this._onSetZeroCancel = () => {
+      this._closeSetZeroModal(false);
+    };
+
+    this._onSetZeroConfirmClick = () => {
+      const confirmBtn = document.getElementById("gs-zero-confirm");
+      if (!confirmBtn || confirmBtn.disabled) {
+        return;
+      }
+      this._closeSetZeroModal(true);
+    };
+
+    this._bindSetZeroModal = () => {
+      const ackEl = document.getElementById("gs-zero-ack");
+      const cancelBtn = document.getElementById("gs-zero-cancel");
+      const confirmBtn = document.getElementById("gs-zero-confirm");
+
+      if (ackEl) {
+        ackEl.addEventListener("change", this._updateSetZeroModalConfirm);
+      }
+      if (cancelBtn) {
+        cancelBtn.addEventListener("click", this._onSetZeroCancel);
+      }
+      if (confirmBtn) {
+        confirmBtn.addEventListener("click", this._onSetZeroConfirmClick);
+      }
+      document.addEventListener("keydown", this._onSetZeroModalKeydown);
+    };
 
     this._onCmdTypeChange = () => {
       const typeEl = document.getElementById("gs-cmd-type");
       setCmdTypeView(typeEl ? typeEl.value : GS_CMD_TYPE_ANGLE);
+    };
+
+    this._onChannelAction = async (event) => {
+      const stopBtn = event.target.closest(".gs-ch-stop");
+      const zeroBtn = event.target.closest(".gs-ch-zero");
+      if (!stopBtn && !zeroBtn) {
+        return;
+      }
+
+      const btn = stopBtn || zeroBtn;
+      const index = Number(btn.dataset.index);
+      const resultEl = document.getElementById("gs-cmd-result");
+      const action = stopBtn ? "stop" : "set_zero";
+      const actionLabel = stopBtn ? "停止" : "设零点";
+
+      if (!Number.isInteger(index) || index < 0 || index >= GS_CHANNEL_COUNT) {
+        resultEl.textContent = "index 无效";
+        return;
+      }
+
+      if (zeroBtn) {
+        const confirmed = await this._requestSetZeroConfirm(index);
+        if (!confirmed) {
+          resultEl.textContent = `[${index}] 设零点已取消`;
+          return;
+        }
+      }
+
+      btn.disabled = true;
+      try {
+        const { status, data } = await postModule("gs", action, { index });
+        if (data.ok) {
+          resultEl.textContent = [
+            `已下发 [${data.index}] ${actionLabel}`,
+            `cmd 累计=${data.cmd_tx_count}`,
+            data.note || "",
+          ].join(" · ");
+        } else {
+          resultEl.textContent = `[${index}] ${actionLabel} 失败 (${status}): ${data.error || "unknown"}`;
+        }
+      } catch (err) {
+        resultEl.textContent = `[${index}] ${actionLabel} 请求异常: ${err}`;
+      } finally {
+        btn.disabled = false;
+      }
     };
 
     this._onGsSend = async () => {
@@ -288,6 +483,11 @@ export default {
 
     document.getElementById("gs-cmd-type").addEventListener("change", this._onCmdTypeChange);
     document.getElementById("gs-send").addEventListener("click", this._onGsSend);
+    const channelTbody = document.getElementById("gs-channel-tbody");
+    if (channelTbody) {
+      channelTbody.addEventListener("click", this._onChannelAction);
+    }
+    this._bindSetZeroModal();
     this._onCmdTypeChange();
   },
 
@@ -316,11 +516,17 @@ export default {
       setText("gs-mcu-limit", "±45（MCU 默认）");
     }
 
-    const speedLimit = data.mcu_speed_limit_dps || [];
-    if (speedLimit.length >= 2) {
-      setText("gs-mcu-speed-limit", `[${fmt(speedLimit[0], 0)}, ${fmt(speedLimit[1], 0)}]`);
+    const speedMin = data.mcu_speed_min_dps;
+    const speedRated = data.mcu_speed_rated_dps;
+    if (speedMin != null && speedRated != null) {
+      setText("gs-mcu-speed-limit", `≥${fmt(speedMin, 0)}，额定 ${fmt(speedRated, 0)}（无上限，建议≤额定）`);
     } else {
-      setText("gs-mcu-speed-limit", "[6, 45]");
+      const speedLimit = data.mcu_speed_limit_dps || [];
+      if (speedLimit.length >= 2) {
+        setText("gs-mcu-speed-limit", `≥${fmt(speedLimit[0], 0)}，额定 ${fmt(speedLimit[1], 0)}`);
+      } else {
+        setText("gs-mcu-speed-limit", "≥6，额定 20（建议≤额定）");
+      }
     }
 
     if (!connected) {
@@ -340,6 +546,7 @@ export default {
     setText("gs-frame-id", data.frame_id ?? "—");
 
     const channels = data.channels || [];
+    this._channels = channels;
     const onlineCount = Number.isFinite(Number(data.online_count))
       ? Number(data.online_count)
       : channels.filter((ch) => ch && ch.online).length;
@@ -381,6 +588,24 @@ export default {
   },
 
   destroy() {
+    this._closeSetZeroModal(false);
+
+    const ackEl = document.getElementById("gs-zero-ack");
+    if (ackEl && this._updateSetZeroModalConfirm) {
+      ackEl.removeEventListener("change", this._updateSetZeroModalConfirm);
+    }
+    const cancelBtn = document.getElementById("gs-zero-cancel");
+    if (cancelBtn && this._onSetZeroCancel) {
+      cancelBtn.removeEventListener("click", this._onSetZeroCancel);
+    }
+    const confirmBtn = document.getElementById("gs-zero-confirm");
+    if (confirmBtn && this._onSetZeroConfirmClick) {
+      confirmBtn.removeEventListener("click", this._onSetZeroConfirmClick);
+    }
+    if (this._onSetZeroModalKeydown) {
+      document.removeEventListener("keydown", this._onSetZeroModalKeydown);
+    }
+
     const typeEl = document.getElementById("gs-cmd-type");
     if (typeEl && this._onCmdTypeChange) {
       typeEl.removeEventListener("change", this._onCmdTypeChange);
@@ -388,6 +613,10 @@ export default {
     const btn = document.getElementById("gs-send");
     if (btn && this._onGsSend) {
       btn.removeEventListener("click", this._onGsSend);
+    }
+    const channelTbody = document.getElementById("gs-channel-tbody");
+    if (channelTbody && this._onChannelAction) {
+      channelTbody.removeEventListener("click", this._onChannelAction);
     }
   },
 };
