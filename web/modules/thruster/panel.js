@@ -182,7 +182,7 @@ export default {
           MCU 映射 TC 百分比：percent = (thrusts[0] - 1500) × 100 / 500，限幅 ±100%。
           开周期会带 <code>thruster_unlocked=true</code>。
           <strong>仅「周期发送」开启后</strong>才持续发 <code>/thruster_command</code>；
-          「停止周期」后真正停发，可验证 MCU 断流看门狗。
+          切到其他界面或监测页<strong>不会</strong>停发，须点「停止周期发送」才真正停发，可验证 MCU 断流看门狗。
         </p>
         <div class="control-row">
           <label class="label-inline" for="thr-speed">thrusts[0]</label>
@@ -557,10 +557,8 @@ export default {
   },
 
   destroy() {
-    if (this._streaming) {
-      postModule("thruster", "stream_stop", {}).catch(() => {});
-      this._streaming = false;
-    }
+    // 周期保活在后端，切页/销毁面板不得 stream_stop；仅用户点「停止周期发送」才停。
+    this._streaming = false;
     const speedInput = document.getElementById("thr-speed");
     if (speedInput && this._onSpeedInput) {
       speedInput.removeEventListener("change", this._onSpeedInput);
