@@ -9,6 +9,7 @@ from rclpy.node import Node
 from sealien_ctrlcore_web.core.base_module import WebModule
 from sealien_ctrlcore_web.modules.link.backend import LinkModule
 from sealien_ctrlcore_web.modules.m1.backend import M1Module
+from sealien_ctrlcore_web.modules.lora.backend import LoraModule
 from sealien_ctrlcore_web.modules.elb105.backend import Elb105Module
 from sealien_ctrlcore_web.modules.height.backend import HeightModule
 from sealien_ctrlcore_web.modules.depth.backend import DepthModule
@@ -21,10 +22,12 @@ from sealien_ctrlcore_web.modules.bms.backend import BmsModule
 from sealien_ctrlcore_web.modules.mixed_io.backend import MixedIoModule
 from sealien_ctrlcore_web.modules.payload_en.backend import PayloadEnModule
 from sealien_ctrlcore_web.modules.thruster.backend import ThrusterModule
+from sealien_ctrlcore_web.modules.controller_monitor.backend import ControllerMonitorModule
 
 _MODULE_CLASSES = {
     "link": LinkModule,
     "m1": M1Module,
+    "lora": LoraModule,
     "elb105": Elb105Module,
     "height": HeightModule,
     "depth": DepthModule,
@@ -37,6 +40,7 @@ _MODULE_CLASSES = {
     "mixed_io": MixedIoModule,
     "payload_en": PayloadEnModule,
     "thruster": ThrusterModule,
+    "controller_monitor": ControllerMonitorModule,
 }
 
 

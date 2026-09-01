@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""俯仰位置环百分比：45 mm=-100%，125 mm=+100%；cmd 编码 speed_rpm=pct×10+1000。"""
+"""俯仰位置环百分比：45 mm=-100%，145 mm=+100%；cmd 编码 speed_rpm=pct×10+1000。"""
 
 import unittest
 
@@ -17,8 +17,8 @@ from sealien_ctrlcore_web.modules.pitch_motor.backend import (
 class PitchPctMapTest(unittest.TestCase):
     def test_ends_and_mid(self) -> None:
         self.assertAlmostEqual(pitch_mm_to_pct(45.0), -100.0)
-        self.assertAlmostEqual(pitch_mm_to_pct(85.0), 0.0)
-        self.assertAlmostEqual(pitch_mm_to_pct(125.0), 100.0)
+        self.assertAlmostEqual(pitch_mm_to_pct(95.0), 0.0)
+        self.assertAlmostEqual(pitch_mm_to_pct(145.0), 100.0)
 
     def test_roundtrip(self) -> None:
         for pct in (-100.0, -50.0, 0.0, 25.0, 100.0):
@@ -36,11 +36,11 @@ class PitchPctMapTest(unittest.TestCase):
 
     def test_est_pair_keeps_mm(self) -> None:
         target_mm, actual_mm = pitch_est_pair(0.0, -100.0)
-        self.assertEqual(target_mm, 85.0)
+        self.assertEqual(target_mm, 95.0)
         self.assertEqual(actual_mm, 45.0)
         target_mm, actual_mm = pitch_est_pair(100.0, 50.0)
-        self.assertEqual(target_mm, 125.0)
-        self.assertEqual(actual_mm, 105.0)
+        self.assertEqual(target_mm, 145.0)
+        self.assertEqual(actual_mm, 120.0)
 
 
 if __name__ == "__main__":

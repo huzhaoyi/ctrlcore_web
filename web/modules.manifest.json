@@ -2,6 +2,7 @@
   "modules": [
     { "id": "link", "script": "/modules/link/panel.js" },
     { "id": "m1", "script": "/modules/m1/panel.js" },
+    { "id": "lora", "script": "/modules/lora/panel.js" },
     { "id": "elb105", "script": "/modules/elb105/panel.js" },
     { "id": "height", "script": "/modules/height/panel.js" },
     { "id": "depth", "script": "/modules/depth/panel.js" },
@@ -12,6 +13,7 @@
     { "id": "bms", "script": "/modules/bms/panel.js" },
     { "id": "payload_en", "script": "/modules/payload_en/panel.js" },
     { "id": "mixed_io", "script": "/modules/mixed_io/panel.js" },
-    { "id": "thruster", "script": "/modules/thruster/panel.js" }
+    { "id": "thruster", "script": "/modules/thruster/panel.js" },
+    { "id": "controller_monitor", "script": "/modules/controller_monitor/panel.js" }
   ]
 }

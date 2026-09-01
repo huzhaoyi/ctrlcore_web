@@ -137,7 +137,7 @@ sealien_ctrlcore_web/
 **页面显示 MCU 离线**
 
 - 确认 `communication_service` 已启动
-- MCU mavproxy chan 1 指向 OBC：`192.168.100.50:9999`
+- MCU mavproxy chan 1 指向 OBC（Jetson）：`192.168.100.250:9999`
 - `ros2 topic echo /HeartbeatStatus --once` 是否有数据
 
 **端口 8081 被占用**
@@ -157,6 +157,6 @@ pkill -f ctrlcore_web_node
 
 | 设备 | IP | 端口 |
 |------|-----|------|
-| OBC / PC | 192.168.100.50 | UDP 9999（MAVLink 入） |
+| OBC（Jetson） | 192.168.100.250 | UDP 9999（MAVLink 入，`comm_bringup`） |
 | MCU | 192.168.100.199 | — |
-| Web | 192.168.100.50 | TCP 8081 |
+| 岸端 Web | 192.168.100.50 | TCP 8081（排查时本机启） |

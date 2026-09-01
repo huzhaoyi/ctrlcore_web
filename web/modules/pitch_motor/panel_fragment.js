@@ -8,7 +8,7 @@ const RUN_CMD = {
 };
 
 const PITCH_TRAVEL_MIN_MM = 45.0;
-const PITCH_TRAVEL_MAX_MM = 125.0;
+const PITCH_TRAVEL_MAX_MM = 145.0;
 const PITCH_ZERO_MM = (PITCH_TRAVEL_MIN_MM + PITCH_TRAVEL_MAX_MM) * 0.5;
 
 function setText(id, text) {
@@ -55,22 +55,28 @@ export function pitchMotorHtml() {
         </div>
         <div class="control-row" style="margin-top:12px;display:flex;flex-wrap:wrap;gap:10px">
           <button id="pitch-fwd" type="button"
-            style="min-width:120px;border-color:rgba(46,204,113,0.5);background:rgba(46,204,113,0.15)">正转</button>
+            style="min-width:120px;border-color:rgba(46,204,113,0.5);background:rgba(46,204,113,0.15)">正转 → 后端</button>
           <button id="pitch-rev" type="button"
-            style="min-width:120px;border-color:rgba(52,152,219,0.5);background:rgba(52,152,219,0.15)">反转</button>
+            style="min-width:120px;border-color:rgba(52,152,219,0.5);background:rgba(52,152,219,0.15)">反转 → 前端</button>
           <button id="pitch-stop" type="button"
             style="min-width:120px;border-color:rgba(243,18,96,0.5);background:rgba(243,18,96,0.15)">停止</button>
         </div>
-        <div id="pitch-cmd-result" class="hint">软限位 CH1：正转≤45 mm、反转≥125 mm；零位 0% = ${PITCH_ZERO_MM.toFixed(0)} mm</div>
+        <div id="pitch-cmd-result" class="hint">
+          方向提醒：<strong>45 mm = 后端（-100%）</strong>，<strong>145 mm = 前端（+100%）</strong>；
+          正转读数减小→后端，反转读数增大→前端。
+          软限位 CH1：正转≤45 mm、反转≥145 mm；零位 0% = ${PITCH_ZERO_MM.toFixed(0)} mm。
+        </div>
       </section>
 
       <section class="panel">
         <h2>位置环（正式控制）</h2>
         <p class="hint" style="margin-top:0">
           <code>run_cmd=3</code> 发 <strong>±100%</strong>。MCU 标定：
-          <strong>45 mm = -100%</strong>，<strong>零位 ${PITCH_ZERO_MM.toFixed(0)} mm = 0%</strong>，<strong>125 mm = +100%</strong>。
+          <strong>45 mm = -100%（后端）</strong>，
+          <strong>零位 ${PITCH_ZERO_MM.toFixed(0)} mm = 0%</strong>，
+          <strong>145 mm = +100%（前端）</strong>。
           PID 内部仍用 mm。拉线原始 mm 走 CH1 / <code>/WireDisplacementStatus</code>。
-          推算 mm 仅按 45/125 标定本地换算，方便对照，不是传感器读数。
+          推算 mm 仅按 45/145 标定本地换算，方便对照，不是传感器读数。
         </p>
         <div class="card-grid">
           <div class="card">

@@ -9,7 +9,7 @@ const WIRE_RANGE_MM = 250.0;
 /* 俯仰电机限位 · MCU 读 displacement_mm[1] = WPS CH1 */
 const PITCH_WIRE_CH = 1;
 const PITCH_TRAVEL_MIN_MM = 45.0;
-const PITCH_TRAVEL_MAX_MM = 125.0;
+const PITCH_TRAVEL_MAX_MM = 145.0;
 const PITCH_ZERO_MM = (PITCH_TRAVEL_MIN_MM + PITCH_TRAVEL_MAX_MM) * 0.5;
 
 function fmtMm(value) {
@@ -84,18 +84,18 @@ function pitchBarHtml() {
   return `
           <div class="card wide" style="margin-top:8px">
             <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px">
-              <span class="hint" style="margin:0">CH1 · 俯仰电机（软限位 45~125 mm，零位 ${PITCH_ZERO_MM.toFixed(0)} mm）</span>
+              <span class="hint" style="margin:0">CH1 · 俯仰电机（软限位 45 后端 ~ 145 前端 mm，零位 ${PITCH_ZERO_MM.toFixed(0)} mm）</span>
               <span id="wire-ch1-bar-label" class="value mono-block" style="margin:0;font-size:1rem">—</span>
             </div>
             <div style="position:relative;margin-top:20px;padding-top:2px;padding-bottom:18px">
               <div style="position:relative;height:14px;border-radius:999px;background:rgba(0,0,0,0.35);border:1px solid var(--border);overflow:visible">
                 <div aria-hidden="true" style="position:absolute;inset:0;pointer-events:none">
                   <div style="position:absolute;left:${minPct}%;width:${zoneWidth}%;top:0;bottom:0;background:rgba(46,204,113,0.14);border-radius:2px"></div>
-                  <div style="position:absolute;left:${minPct}%;top:-2px;bottom:-2px;width:0;border-left:2px solid #e74c3c;box-shadow:0 0 4px rgba(231,76,60,0.6)" title="正转限位 ${PITCH_TRAVEL_MIN_MM} mm"></div>
-                  <div style="position:absolute;left:${maxPct}%;top:-2px;bottom:-2px;width:0;border-left:2px solid #e74c3c;box-shadow:0 0 4px rgba(231,76,60,0.6)" title="反转限位 ${PITCH_TRAVEL_MAX_MM} mm"></div>
+                  <div style="position:absolute;left:${minPct}%;top:-2px;bottom:-2px;width:0;border-left:2px solid #e74c3c;box-shadow:0 0 4px rgba(231,76,60,0.6)" title="后端限位 ${PITCH_TRAVEL_MIN_MM} mm（正转）"></div>
+                  <div style="position:absolute;left:${maxPct}%;top:-2px;bottom:-2px;width:0;border-left:2px solid #e74c3c;box-shadow:0 0 4px rgba(231,76,60,0.6)" title="前端限位 ${PITCH_TRAVEL_MAX_MM} mm（反转）"></div>
                   <div style="position:absolute;left:${zeroPct}%;top:-2px;bottom:-2px;width:0;border-left:2px solid #f1c40f;box-shadow:0 0 4px rgba(241,196,15,0.7)" title="零位 ${PITCH_ZERO_MM} mm = 0%"></div>
-                  <span class="mono" style="position:absolute;left:calc(${minPct}% - 4px);top:-18px;transform:translateX(-50%);font-size:10px;color:#e74c3c">${PITCH_TRAVEL_MIN_MM}</span>
-                  <span class="mono" style="position:absolute;left:calc(${maxPct}% + 4px);top:-18px;transform:translateX(-50%);font-size:10px;color:#e74c3c">${PITCH_TRAVEL_MAX_MM}</span>
+                  <span class="mono" style="position:absolute;left:calc(${minPct}% - 4px);top:-18px;transform:translateX(-50%);font-size:10px;color:#e74c3c">${PITCH_TRAVEL_MIN_MM} 后</span>
+                  <span class="mono" style="position:absolute;left:calc(${maxPct}% + 4px);top:-18px;transform:translateX(-50%);font-size:10px;color:#e74c3c">${PITCH_TRAVEL_MAX_MM} 前</span>
                   <span class="mono" style="position:absolute;left:${zeroPct}%;top:16px;transform:translateX(-50%);font-size:10px;color:#f1c40f">零位 ${PITCH_ZERO_MM.toFixed(0)}</span>
                 </div>
                 <div style="position:relative;height:100%;border-radius:999px;overflow:hidden">
@@ -103,7 +103,12 @@ function pitchBarHtml() {
                 </div>
               </div>
             </div>
-            <p class="hint" style="margin:4px 0 0">红线：MCU 软限位（正转≤${PITCH_TRAVEL_MIN_MM} mm，反转≥${PITCH_TRAVEL_MAX_MM} mm）；黄线：位置环零位 0% = ${PITCH_ZERO_MM.toFixed(0)} mm。CH0 在「浮力驱动」。</p>
+            <p class="hint" style="margin:4px 0 0">
+              方向：<strong>${PITCH_TRAVEL_MIN_MM} mm = 后端</strong>，
+              <strong>${PITCH_TRAVEL_MAX_MM} mm = 前端</strong>。
+              红线：MCU 软限位（正转→后端 ≤${PITCH_TRAVEL_MIN_MM} mm，反转→前端 ≥${PITCH_TRAVEL_MAX_MM} mm）；
+              黄线：位置环零位 0% = ${PITCH_ZERO_MM.toFixed(0)} mm。CH0 在「浮力驱动」。
+            </p>
           </div>
         `;
 }

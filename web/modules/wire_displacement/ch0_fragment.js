@@ -103,7 +103,8 @@ export function plungerWireHtml() {
             <div id="pp-oil-bar" style="height:100%;width:0%;background:var(--accent);transition:width 0.2s ease, background 0.2s ease"></div>
           </div>
           <p class="hint" style="margin:6px 0 0">
-            百分比由 MCU 从拉线 CH0 换算上发（50 Hz，与拉线同频）。毫米原值见下方 <code>/WireDisplacementStatus</code>。
+            百分比由 MCU 从拉线 CH0 换算上发（50 Hz）。
+            <strong>开泵充油</strong> → 数值变大；<strong>开阀放油</strong> → 数值变小。
             100% 即满油，MCU 强制两路停泵。
           </p>
         </div>
@@ -136,7 +137,7 @@ export function plungerWireHtml() {
           </div>
           <p class="hint" style="margin:6px 0 0">
             红线：MCU 软限位，CH0 ≥ ${PLUNGER_TRAVEL_MAX_MM} mm 时两路 PWM 强制停（钳到 10%）。
-            单开一泵较慢，两泵同开较快。进度条按拉线满量程 250 mm。
+            充油看毫米变大，放油看毫米变小。进度条按拉线满量程 250 mm。
           </p>
         </div>
       </section>

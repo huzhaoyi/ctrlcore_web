@@ -34,8 +34,8 @@ export const HULL_SEGMENTS = [
     subtitle: "卫通 · LoRa",
     defaultModule: "m1",
     accentVar: "--seg-comm",
-    debugModules: ["m1"],
-    debugPlaceholder: "LoRa · 无独立调试页",
+    debugModules: ["m1", "lora"],
+    debugPlaceholder: null,
   },
   {
     id: "buoyancy",
@@ -49,10 +49,10 @@ export const HULL_SEGMENTS = [
   {
     id: "stern",
     title: "艉部",
-    subtitle: "舵机 · 推进器",
+    subtitle: "舵机 · 推进器 · 运动监视",
     defaultModule: "thruster",
     accentVar: "--seg-stern",
-    debugModules: ["gs", "thruster"],
+    debugModules: ["gs", "thruster", "controller_monitor"],
     debugPlaceholder: null,
   },
 ];

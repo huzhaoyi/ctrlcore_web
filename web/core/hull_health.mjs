@@ -380,6 +380,19 @@ function assessPitch(modules) {
   return items;
 }
 
+function assessLora(data) {
+  if (!isAlive(data)) {
+    return healthItem(HEALTH.BAD, "LoRa", "离线", "lora");
+  }
+  if (data.serial_open === false) {
+    return healthItem(HEALTH.BAD, "LoRa", "串口未开", "lora");
+  }
+  if (data.link_up === false) {
+    return healthItem(HEALTH.WARN, "LoRa", "串口开，无空中数据", "lora");
+  }
+  return healthItem(HEALTH.OK, "LoRa", "已连通", "lora");
+}
+
 function assessM1(data) {
   if (!isAlive(data)) {
     return healthItem(HEALTH.BAD, "天通卫通 M1", "模块离线", "m1");
@@ -505,10 +518,21 @@ function buildKpis(segmentId, modules, snapshot) {
     }
     case "comm": {
       const m1 = mod(modules, "m1");
+      const lora = mod(modules, "lora");
       const status = m1Status(m1);
       const gnssValid = Number(status?.gnss_valid) === 1;
       const lat = Number(status?.lat_deg);
       const lon = Number(status?.lon_deg);
+      let loraValue = "离线";
+      if (isAlive(lora)) {
+        if (lora.link_up) {
+          loraValue = "已连通";
+        } else if (lora.serial_open) {
+          loraValue = "无空中";
+        } else {
+          loraValue = "串口未开";
+        }
+      }
       return [
         { label: "卫通", value: isAlive(m1) ? (status?.net_state_name || "—") : "离线" },
         {
@@ -523,7 +547,7 @@ function buildKpis(segmentId, modules, snapshot) {
             ? lon.toFixed(6)
             : "—",
         },
-        { label: "LoRa", value: "无监测" },
+        { label: "LoRa", value: loraValue },
       ];
     }
     case "buoyancy": {
@@ -607,7 +631,7 @@ function buildSegment(segment, modules, snapshot) {
     case "comm":
       items = [
         assessM1(mod(modules, "m1")),
-        healthItem(HEALTH.UNKNOWN, "LoRa", "暂无监测接口", null),
+        assessLora(mod(modules, "lora")),
       ];
       break;
     case "buoyancy":

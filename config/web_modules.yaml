@@ -6,6 +6,7 @@ ctrlcore_web_node:
     enabled_modules:
       - link
       - m1
+      - lora
       - elb105
       - height
       - depth
@@ -18,3 +19,4 @@ ctrlcore_web_node:
       - payload_en
       - mixed_io
       - thruster
+      - controller_monitor
